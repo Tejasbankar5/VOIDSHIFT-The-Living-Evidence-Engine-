@@ -1,0 +1,32 @@
+# Godot 4.x
+.godot/
+*.translation
+
+# Build artifacts & Binaries
+VOIDSHIFT_Windows_Build/
+*.exe
+*.obj
+*.o
+*.pdb
+*.ilk
+*.idb
+
+# Local Backups
+godot_game_backup/
+godot_game_pre_overhaul_backup/
+
+# IDE & Editor files
+.vs/
+.vscode/
+.idea/
+*.suo
+*.user
+*.vcxproj.user
+
+# System & Temp files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.tmp
+*.log

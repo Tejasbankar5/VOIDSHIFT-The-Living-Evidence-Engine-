@@ -1,0 +1,25 @@
+[gd_scene format=3 uid="uid://dfk82hs7q5p61"]
+
+[ext_resource type="Script" path="res://scripts/player/PlayerController.gd" id="1_player"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_1"]
+radius = 16.0
+
+[node name="Player" type="CharacterBody2D"]
+collision_layer = 2
+collision_mask = 1
+motion_mode = 1
+script = ExtResource("1_player")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="."]
+position = Vector2(0, 4)
+shape = SubResource("CircleShape2D_1")
+
+[node name="Camera2D" type="Camera2D" parent="."]
+zoom = Vector2(1.35, 1.35)
+position_smoothing_enabled = true
+position_smoothing_speed = 8.0
+limit_left = 60
+limit_top = 30
+limit_right = 1540
+limit_bottom = 1200

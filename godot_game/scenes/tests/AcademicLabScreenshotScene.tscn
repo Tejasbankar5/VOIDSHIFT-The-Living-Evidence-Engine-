@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://c6xk19vsl83pl"]
+
+[ext_resource type="Script" path="res://scripts/tests/AcademicLabScreenshotRunner.gd" id="1_labshot"]
+
+[node name="AcademicLabScreenshotScene" type="Node2D"]
+script = ExtResource("1_labshot")

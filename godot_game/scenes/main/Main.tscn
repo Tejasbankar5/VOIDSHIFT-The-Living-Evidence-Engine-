@@ -1,0 +1,78 @@
+[gd_scene format=3 uid="uid://c5qwxm18ynvr6"]
+
+[ext_resource type="Script" path="res://scripts/core/GameManager.gd" id="1_manager"]
+[ext_resource type="Script" path="res://scripts/map/StationMap.gd" id="2_map"]
+[ext_resource type="PackedScene" path="res://scenes/player/Player.tscn" id="3_player"]
+[ext_resource type="Script" path="res://scripts/core/AudioSynthesizer.gd" id="4_audio"]
+[ext_resource type="Script" path="res://scripts/ui/GameHUD.gd" id="5_hud"]
+[ext_resource type="Script" path="res://scripts/ui/MainMenu.gd" id="6_menu"]
+[ext_resource type="Script" path="res://scripts/ui/MeetingScreen.gd" id="7_meeting"]
+[ext_resource type="Script" path="res://scripts/ui/EvidenceScreen.gd" id="8_evidence"]
+[ext_resource type="Script" path="res://scripts/ui/TaskDialog.gd" id="9_task"]
+[ext_resource type="Script" path="res://scripts/academic/AcademicLab.gd" id="10_lab"]
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_manager")
+
+[node name="StationMap" type="Node2D" parent="."]
+script = ExtResource("2_map")
+
+[node name="Player" parent="." instance=ExtResource("3_player")]
+position = Vector2(700, 960)
+
+[node name="AudioSynthesizer" type="Node" parent="."]
+script = ExtResource("4_audio")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="."]
+
+[node name="GameHUD" type="Node2D" parent="CanvasLayer"]
+script = ExtResource("5_hud")
+
+[node name="MainMenu" type="Control" parent="CanvasLayer"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("6_menu")
+
+[node name="MeetingScreen" type="Control" parent="CanvasLayer"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("7_meeting")
+
+[node name="EvidenceScreen" type="Control" parent="CanvasLayer"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("8_evidence")
+
+[node name="TaskDialog" type="Control" parent="CanvasLayer"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("9_task")
+
+[node name="AcademicLab" type="Control" parent="CanvasLayer"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("10_lab")

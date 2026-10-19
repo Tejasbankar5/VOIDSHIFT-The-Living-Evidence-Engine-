@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bkjwe819slq0p"]
+
+[ext_resource type="Script" path="res://scripts/tests/ScreenshotRunner.gd" id="1_shot"]
+
+[node name="ScreenshotScene" type="Node2D"]
+script = ExtResource("1_shot")
