@@ -2,82 +2,93 @@ class_name StationMap
 extends Node2D
 
 const StationMapRenderer = preload("res://scripts/render/StationMapRenderer.gd")
+const CampaignData = preload("res://scripts/core/CampaignData.gd")
+const StationData = preload("res://scripts/core/StationData.gd")
+const GameEnums = preload("res://scripts/core/GameEnums.gd")
 
-## Station Map Node for DSS Chronos.
-## Handles procedural visuals, collision boundaries, and location queries.
+## Multi-Campaign Station Map Controller for VOIDSHIFT.
+## Handles procedural visuals, collision boundaries, and location queries across:
+## 1. The Hollow Crown
+## 2. Blackglass Station
+## 3. The Last Signal
 
 signal task_interacted(task_spot: StationData.TaskSpotDef)
 signal emergency_button_pressed()
 signal vent_interacted(vent: StationData.VentDef)
+signal echo_clue_discovered(clue: CampaignData.EchoClueDef)
 
 @export var anim_time: float = 0.0
+
+var campaign_mode: GameEnums.CampaignMode = GameEnums.CampaignMode.HOLLOW_CROWN
+var active_campaign: CampaignData.CampaignDef = null
+var echo_vision_active: bool = false
 
 var completed_tasks: Array[int] = []
 var active_sabotage: GameEnums.SabotageType = GameEnums.SabotageType.NONE
 var sabotage_timer: float = 0.0
 
-# Wall bounds for mathematical collision & navigation verification
 var wall_rects: Array[Rect2] = []
+var static_body: StaticBody2D = null
 
 func _ready() -> void:
+	set_campaign(GameEnums.CampaignMode.HOLLOW_CROWN)
 	build_collision_boundaries()
+
+func set_campaign(mode: GameEnums.CampaignMode) -> void:
+	campaign_mode = mode
+	active_campaign = CampaignData.get_campaign(mode)
+	completed_tasks.clear()
+	queue_redraw()
 
 func _process(delta: float) -> void:
 	anim_time += delta
 	queue_redraw()
 
 func _draw() -> void:
-	StationMapRenderer.draw_station(self, anim_time, completed_tasks, active_sabotage, sabotage_timer)
+	var clues: Array = active_campaign.clues if active_campaign else []
+	StationMapRenderer.draw_station(
+		self, anim_time, completed_tasks, active_sabotage, sabotage_timer,
+		campaign_mode, echo_vision_active, clues
+	)
 
 func build_collision_boundaries() -> void:
-	# Build hull boundaries and void blockers to enclose walkable rooms & corridors
-	var static_body := StaticBody2D.new()
+	if static_body != null:
+		static_body.queue_free()
+
+	static_body = StaticBody2D.new()
 	static_body.name = "StationWalls"
 	add_child(static_body)
+	wall_rects.clear()
 
-	# Solid blocker rects for void spaces between rooms and station exterior
 	var blocker_walls: Array[Rect2] = [
-		# Top voids flanking Bridge
-		Rect2(60, 30, 510, 280),      # Top-left void (above Medical)
-		Rect2(1030, 30, 510, 280),    # Top-right void (above Research)
-		Rect2(560, 30, 480, 20),      # Bridge top hull wall
-		Rect2(560, 50, 20, 220),      # Bridge left wall
-		Rect2(1020, 50, 20, 220),     # Bridge right wall
-		# Flanking Bridge-to-Hub corridor (x: 740..860, y: 270..330)
-		Rect2(580, 270, 160, 60),     # Left of Bridge-Hub corridor
-		Rect2(860, 270, 160, 60),     # Right of Bridge-Hub corridor
-		# Flanking Medical-to-Hub corridor (x: 480..540, y: 420..520)
-		Rect2(480, 320, 60, 100),     # Above Med-Hub corridor
-		Rect2(480, 520, 60, 70),      # Below Med-Hub corridor
-		# Flanking Hub-to-Research corridor (x: 1060..1120, y: 420..520)
-		Rect2(1060, 320, 60, 100),    # Above Hub-Research corridor
-		Rect2(1060, 520, 60, 70),     # Below Hub-Research corridor
-		# Flanking Medical-to-Reactor corridor (x: 240..340, y: 580..640)
-		Rect2(80, 580, 160, 60),      # Left of Med-Reactor corridor
-		Rect2(340, 580, 140, 60),     # Right of Med-Reactor corridor
-		# Flanking Hub-to-Electrical/Storage corridor (x: 740..860, y: 590..650)
-		Rect2(540, 590, 200, 60),     # Left of Hub-Lower corridor
-		Rect2(860, 590, 200, 60),     # Right of Hub-Lower corridor
-		# Void between Research and Security
-		Rect2(1100, 580, 420, 70),
-		# Electrical-Storage dividing wall (except doorway at y: 740..820)
+		Rect2(60, 30, 510, 280),      # Top-left void (above Medical/Gallery)
+		Rect2(1030, 30, 510, 280),    # Top-right void (above Lab/Archive)
+		Rect2(560, 30, 480, 20),      # Top hull wall
+		Rect2(560, 50, 20, 220),      # Left upper wall
+		Rect2(1020, 50, 20, 220),     # Right upper wall
+		Rect2(580, 270, 160, 60),     # Left of top corridor
+		Rect2(860, 270, 160, 60),     # Right of top corridor
+		Rect2(480, 320, 60, 100),     # Above left corridor
+		Rect2(480, 520, 60, 70),      # Below left corridor
+		Rect2(1060, 320, 60, 100),    # Above right corridor
+		Rect2(1060, 520, 60, 70),     # Below right corridor
+		Rect2(80, 580, 160, 60),      # Left of mid-left corridor
+		Rect2(340, 580, 140, 60),     # Right of mid-left corridor
+		Rect2(540, 590, 200, 60),     # Left of central-lower corridor
+		Rect2(860, 590, 200, 60),     # Right of central-lower corridor
+		Rect2(1100, 580, 420, 70),    # Void between Lab and Security
 		Rect2(780, 650, 40, 90),      # Upper dividing wall
 		Rect2(780, 820, 40, 80),      # Lower dividing wall
-		# Flanking Electrical/Storage-to-Meeting corridors
-		Rect2(520, 900, 100, 60),     # Left of Elec-Meeting corridor (620..700)
-		Rect2(700, 900, 200, 60),     # Between Elec-Meeting & Storage-Meeting
-		Rect2(980, 900, 80, 60),      # Right of Storage-Meeting (900..980)
-		# Bottom voids flanking Meeting Room
-		Rect2(60, 910, 470, 290),     # Bottom-left void (below Reactor)
-		Rect2(1070, 900, 470, 300),   # Bottom-right void (below Security)
-		# Meeting Room bottom hull wall
-		Rect2(520, 1170, 560, 30),
+		Rect2(520, 900, 100, 60),     # Left of lower-meeting corridor
+		Rect2(700, 900, 200, 60),     # Between lower corridors
+		Rect2(980, 900, 80, 60),      # Right of lower-meeting corridor
+		Rect2(60, 910, 470, 290),     # Bottom-left void
+		Rect2(1070, 900, 470, 300),   # Bottom-right void
+		Rect2(520, 1170, 560, 30),    # Meeting bottom wall
 		Rect2(520, 960, 20, 210),     # Meeting left wall
 		Rect2(1060, 960, 20, 210),    # Meeting right wall
-		# Left outer hull walls
-		Rect2(70, 310, 30, 610),
-		# Right outer hull walls
-		Rect2(1500, 310, 30, 610)
+		Rect2(70, 310, 30, 610),      # Left outer wall
+		Rect2(1500, 310, 30, 610)     # Right outer wall
 	]
 
 	for w in blocker_walls:
@@ -90,29 +101,42 @@ func build_collision_boundaries() -> void:
 		static_body.add_child(col_shape)
 
 func get_current_room(pos: Vector2) -> StationData.RoomDef:
-	for r in StationData.get_rooms():
+	var rooms := active_campaign.rooms if active_campaign else StationData.get_rooms()
+	for r in rooms:
 		if r.rect.has_point(pos):
 			return r
 	return null
 
 func get_nearby_task(pos: Vector2, max_dist: float = 55.0) -> StationData.TaskSpotDef:
-	for t in StationData.get_task_spots():
+	var tasks := active_campaign.tasks if active_campaign else StationData.get_task_spots()
+	for t in tasks:
 		if not (t.id in completed_tasks):
 			if pos.distance_to(t.position) <= max_dist:
 				return t
 	return null
 
+func get_nearby_echo_clue(pos: Vector2, max_dist: float = 65.0) -> CampaignData.EchoClueDef:
+	if not active_campaign:
+		return null
+	for clue in active_campaign.clues:
+		if not clue.is_collected and pos.distance_to(clue.position) <= max_dist:
+			return clue
+	return null
+
 func get_nearby_vent(pos: Vector2, max_dist: float = 50.0) -> StationData.VentDef:
-	for v in StationData.get_vents():
+	var vents := active_campaign.vents if active_campaign else StationData.get_vents()
+	for v in vents:
 		if pos.distance_to(v.position) <= max_dist:
 			return v
 	return null
 
 func is_near_emergency_button(pos: Vector2, max_dist: float = 60.0) -> bool:
-	return pos.distance_to(StationData.get_emergency_button_pos()) <= max_dist
+	var btn_pos: Vector2 = active_campaign.emergency_button_pos if active_campaign else Vector2(800, 1060)
+	return pos.distance_to(btn_pos) <= max_dist
 
 func get_room_waypoints() -> Array[Vector2]:
 	var pts: Array[Vector2] = []
-	for r in StationData.get_rooms():
+	var rooms := active_campaign.rooms if active_campaign else StationData.get_rooms()
+	for r in rooms:
 		pts.append(r.rect.get_center())
 	return pts

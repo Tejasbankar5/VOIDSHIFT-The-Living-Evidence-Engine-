@@ -11,7 +11,16 @@ extends Node2D
 ## - Bottom-right Recent Events feed driven by the Living Evidence Engine
 ## - Responsive viewport scaling (no hardcoded resolution clipping)
 
+const CampaignData = preload("res://scripts/core/CampaignData.gd")
+const RoleAllocator = preload("res://scripts/core/RoleAllocator.gd")
+const GameEnums = preload("res://scripts/core/GameEnums.gd")
+const StationData = preload("res://scripts/core/StationData.gd")
+const LivingEvidenceEngine = preload("res://scripts/evidence/LivingEvidenceEngine.gd")
+
 var player: PlayerController = null
+var campaign_def: CampaignData.CampaignDef = null
+var player_assignment: RoleAllocator.RoleAssignment = null
+var echo_vision_active: bool = false
 var match_time: float = 0.0
 var completed_task_ids: Array[int] = []
 var recent_events: Array[LivingEvidenceEngine.TimelineEvent] = []
@@ -23,6 +32,10 @@ var is_map_expanded: bool = false
 
 func setup(p_player: PlayerController) -> void:
 	player = p_player
+
+func setup_campaign(p_campaign: CampaignData.CampaignDef, p_assign: RoleAllocator.RoleAssignment) -> void:
+	campaign_def = p_campaign
+	player_assignment = p_assign
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed("toggle_map"):
@@ -86,13 +99,19 @@ func draw_top_objective_pill(vp: Vector2) -> void:
 
 	# Objective text
 	var obj_text := "Complete maintenance tasks or deduce the saboteur"
-	if active_sabotage == GameEnums.SabotageType.REACTOR:
+	if echo_vision_active:
+		obj_text = "[ECHO VISION ACTIVE] Scanning for forensic micro-traces..."
+	elif active_sabotage == GameEnums.SabotageType.REACTOR:
 		obj_text = "CRITICAL ALERT: Contain Reactor Core Meltdown!"
 	elif active_sabotage == GameEnums.SabotageType.LIGHTS:
 		obj_text = "EMERGENCY: Restore Electrical Grid Breakers!"
+	elif campaign_def != null and campaign_def.primary_objective != "":
+		obj_text = campaign_def.primary_objective
 
 	var text_col := Color(0.92, 0.96, 1.0) if active_sabotage == GameEnums.SabotageType.NONE else Color(1.0, 0.45, 0.45)
-	draw_string(ThemeDB.fallback_font, Vector2(pill_x + 36.0, pill_y + 20.0), obj_text, HORIZONTAL_ALIGNMENT_LEFT, 300, 11, text_col)
+	if echo_vision_active:
+		text_col = Color(0.0, 0.95, 1.0)
+	draw_string(ThemeDB.fallback_font, Vector2(pill_x + 36.0, pill_y + 20.0), obj_text, HORIZONTAL_ALIGNMENT_LEFT, 320, 11, text_col)
 
 	# Progress underline meter beneath text
 	var total_tasks := StationData.get_task_spots().size()
@@ -302,12 +321,13 @@ func draw_rex_status_card(vp: Vector2) -> void:
 	draw_line(visor_pt + Vector2(-6, -4), visor_pt + Vector2(6, -4), Color(1, 1, 1, 0.85), 1.8, true)
 	draw_line(visor_pt + Vector2(-7, 1), visor_pt + Vector2(7, 1), Color(0.0, 0.85, 1.0, 0.6), 1.4, true)
 
-	# Name: Commander Rex
-	draw_string(ThemeDB.fallback_font, Vector2(card_x + 88, card_y + 26), "Commander Rex", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 1, 1))
+	# Name
+	var disp_name: String = player_assignment.character_name if player_assignment != null else (player.player_name if player != null else "Commander Rex")
+	draw_string(ThemeDB.fallback_font, Vector2(card_x + 88, card_y + 26), disp_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 1, 1))
 
 	# Role Badge
-	var is_saboteur: bool = (player != null and player.role == GameEnums.Role.SABOTEUR_IMPOSTOR)
-	var role_text := "SABOTEUR" if is_saboteur else "CREWMATE"
+	var is_saboteur: bool = (player_assignment != null and player_assignment.is_saboteur) or (player != null and player.role == GameEnums.Role.SABOTEUR_IMPOSTOR)
+	var role_text: String = player_assignment.role_title.to_upper() if player_assignment != null else ("SABOTEUR" if is_saboteur else "CREWMATE")
 	var role_col := Color(1.0, 0.25, 0.25) if is_saboteur else Color(0.0, 0.85, 1.0)
 	draw_string(ThemeDB.fallback_font, Vector2(card_x + 88, card_y + 42), role_text, HORIZONTAL_ALIGNMENT_LEFT, -1, 10, role_col)
 
@@ -360,7 +380,7 @@ func draw_contextual_action_pill(vp: Vector2) -> void:
 
 func draw_bottom_controls_bar(vp: Vector2) -> void:
 	# Subtle navigation shortcuts strip at bottom center
-	var bar_w: float = 460.0
+	var bar_w: float = 560.0
 	var bar_h: float = 24.0
 	var bar_x: float = (vp.x - bar_w) * 0.5
 	var bar_y: float = vp.y - bar_h - 10.0
@@ -369,7 +389,7 @@ func draw_bottom_controls_bar(vp: Vector2) -> void:
 	draw_rect(bar_rect, Color(0.02, 0.04, 0.08, 0.75))
 	draw_rect(bar_rect, Color(0.12, 0.32, 0.52, 0.6), false, 1.0)
 
-	var text := "WASD Move  •  [E] Interact  •  [R] Report  •  [TAB] Evidence  •  [M] Map"
+	var text := "WASD Move  •  [E] Interact  •  [Q] Echo Vision  •  [R] Report  •  [TAB] Evidence  •  [M] Map"
 	draw_string(ThemeDB.fallback_font, Vector2(bar_x, bar_y + 16), text, HORIZONTAL_ALIGNMENT_CENTER, int(bar_w), 9, Color(0.55, 0.72, 0.88))
 
 # =========================================================================

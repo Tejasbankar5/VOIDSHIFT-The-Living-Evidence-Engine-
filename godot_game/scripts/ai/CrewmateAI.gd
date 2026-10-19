@@ -66,7 +66,7 @@ func update_ai(delta: float, room_waypoints: Array[Vector2], task_positions: Arr
 		record_surroundings(all_characters, evidence_engine, match_time)
 
 	# 2. Cooldown timer for Saboteur
-	if role == GameEnums.Role.SABOTEUR_IMPOSTOR and kill_cooldown > 0.0:
+	if is_saboteur() and kill_cooldown > 0.0:
 		kill_cooldown = maxf(0.0, kill_cooldown - delta)
 
 	# 3. State logic
@@ -118,7 +118,7 @@ func update_ai(delta: float, room_waypoints: Array[Vector2], task_positions: Arr
 func decide_next_behavior(room_waypoints: Array[Vector2], task_positions: Array[Vector2], all_characters: Array[CharacterBody2D]) -> void:
 	state_timer = randf_range(4.0, 9.0)
 
-	if role == GameEnums.Role.SABOTEUR_IMPOSTOR:
+	if is_saboteur():
 		# If kill is ready, stalk
 		if can_kill() and randf() < 0.65:
 			ai_state = AIState.STALKING_TARGET
@@ -149,10 +149,10 @@ func find_closest_victim(all_characters: Array[CharacterBody2D]) -> CharacterBod
 		var is_crew := false
 		if ch is CrewmateAI:
 			is_alive = ch.character_state == GameEnums.CharacterState.ALIVE
-			is_crew = ch.role != GameEnums.Role.SABOTEUR_IMPOSTOR
+			is_crew = not ch.is_saboteur()
 		elif ch is PlayerController:
 			is_alive = ch.character_state == GameEnums.CharacterState.ALIVE
-			is_crew = ch.role != GameEnums.Role.SABOTEUR_IMPOSTOR
+			is_crew = not ch.is_saboteur()
 
 		if is_alive and is_crew:
 			var d := global_position.distance_to(ch.global_position)
@@ -161,8 +161,11 @@ func find_closest_victim(all_characters: Array[CharacterBody2D]) -> CharacterBod
 				closest = ch
 	return closest
 
+func is_saboteur() -> bool:
+	return role == GameEnums.Role.INFILTRATOR or role == GameEnums.Role.DISRUPTOR or role == GameEnums.Role.SABOTEUR_IMPOSTOR
+
 func can_kill() -> bool:
-	return role == GameEnums.Role.SABOTEUR_IMPOSTOR and character_state == GameEnums.CharacterState.ALIVE and kill_cooldown <= 0.0
+	return is_saboteur() and character_state == GameEnums.CharacterState.ALIVE and kill_cooldown <= 0.0
 
 func execute_kill(victim: CharacterBody2D, evidence_engine: LivingEvidenceEngine, match_time: float) -> void:
 	kill_cooldown = max_kill_cooldown

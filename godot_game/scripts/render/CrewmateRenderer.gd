@@ -1,6 +1,8 @@
 class_name CrewmateRenderer
 extends RefCounted
 
+const GameEnums = preload("res://scripts/core/GameEnums.gd")
+
 ## High-Quality Stylized Sci-Fi Astronaut & Crewmate Renderer for VOIDSHIFT.
 ## Faithfully implements the Character Design Reference & Turnaround Sheet:
 ## - Full anti-aliasing across all arcs, polygons, and circles for smooth vector curves
@@ -251,3 +253,43 @@ static func draw_dead_body(canvas: CanvasItem, pos: Vector2, color: Color, accen
 	# Sparking severed wire conduits
 	canvas.draw_line(pos + Vector2(-6, -3), pos + Vector2(-11, -8), accent, 1.8, true)
 	canvas.draw_line(pos + Vector2(6, -3), pos + Vector2(10, -9), Color(0.95, 0.8, 0.1), 1.8, true)
+
+static func draw_crewmate_portrait(canvas: CanvasItem, pos: Vector2, role: GameEnums.Role, scale_fac: float = 1.0) -> void:
+	var role_color := get_role_color(role)
+	var accent_color := get_role_accent(role)
+
+	# Suit Shoulders & Collar
+	var shoulder_pts: PackedVector2Array = [
+		pos + Vector2(-26 * scale_fac, 26 * scale_fac),
+		pos + Vector2(-16 * scale_fac, 12 * scale_fac),
+		pos + Vector2(16 * scale_fac, 12 * scale_fac),
+		pos + Vector2(26 * scale_fac, 26 * scale_fac)
+	]
+	canvas.draw_colored_polygon(shoulder_pts, role_color)
+	canvas.draw_line(shoulder_pts[1], shoulder_pts[2], accent_color, 2.0 * scale_fac, true)
+
+	# Neck Seal
+	canvas.draw_circle(pos + Vector2(0, 10 * scale_fac), 12.0 * scale_fac, Color(0.12, 0.15, 0.20), true)
+
+	# Outer Helmet Shell
+	var head_center := pos + Vector2(0, -4 * scale_fac)
+	canvas.draw_circle(head_center, 18.0 * scale_fac, Color(0.90, 0.94, 0.98), true)
+	canvas.draw_arc(head_center, 18.0 * scale_fac, 0, TAU, 36, Color(0.06, 0.08, 0.12), 2.0 * scale_fac, true)
+
+	# Communications Earpieces
+	var ear_x: float = 17.0 * scale_fac
+	canvas.draw_circle(Vector2(head_center.x - ear_x, head_center.y), 3.5 * scale_fac, Color(0.16, 0.20, 0.26), true)
+	canvas.draw_circle(Vector2(head_center.x - ear_x, head_center.y), 1.5 * scale_fac, accent_color, true)
+	canvas.draw_circle(Vector2(head_center.x + ear_x, head_center.y), 3.5 * scale_fac, Color(0.16, 0.20, 0.26), true)
+	canvas.draw_circle(Vector2(head_center.x + ear_x, head_center.y), 1.5 * scale_fac, accent_color, true)
+
+	# High-Gloss Reflective Dome Visor
+	var visor_pt := head_center + Vector2(0, 1.0 * scale_fac)
+	canvas.draw_circle(visor_pt, 12.0 * scale_fac, Color(0.03, 0.06, 0.14), true)
+	canvas.draw_arc(visor_pt, 12.0 * scale_fac, 0, TAU, 32, accent_color, 1.6 * scale_fac, true)
+
+	# Specular Horizon Highlight Arc & Scanline
+	canvas.draw_arc(visor_pt, 9.5 * scale_fac, -PI * 0.75, -PI * 0.25, 20, Color(1, 1, 1, 0.95), 2.0 * scale_fac, true)
+	canvas.draw_line(visor_pt + Vector2(-6 * scale_fac, -4 * scale_fac), visor_pt + Vector2(6 * scale_fac, -4 * scale_fac), Color(1, 1, 1, 0.85), 1.8 * scale_fac, true)
+	canvas.draw_line(visor_pt + Vector2(-7 * scale_fac, 1 * scale_fac), visor_pt + Vector2(7 * scale_fac, 1 * scale_fac), accent_color * Color(1, 1, 1, 0.6), 1.4 * scale_fac, true)
+

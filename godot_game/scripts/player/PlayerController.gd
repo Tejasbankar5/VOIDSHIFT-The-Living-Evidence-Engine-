@@ -12,6 +12,7 @@ signal emergency_requested()
 signal report_requested()
 signal kill_requested()
 signal vent_requested()
+signal echo_vision_toggled()
 
 @export var player_id: int = 0
 @export var player_name: String = "Commander Rex (You)"
@@ -42,7 +43,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	# Handle cooldowns
-	if role == GameEnums.Role.SABOTEUR_IMPOSTOR and kill_cooldown > 0.0:
+	if is_saboteur() and kill_cooldown > 0.0:
 		kill_cooldown = maxf(0.0, kill_cooldown - delta)
 
 	# Movement vector from input map
@@ -71,8 +72,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		report_requested.emit()
 	elif event.is_action_pressed("action_kill") and can_kill():
 		kill_requested.emit()
-	elif event.is_action_pressed("action_vent") and role == GameEnums.Role.SABOTEUR_IMPOSTOR:
+	elif event.is_action_pressed("action_vent") and is_saboteur():
 		vent_requested.emit()
+	elif event is InputEventKey and event.pressed and (event.keycode == KEY_Q or event.keycode == KEY_F):
+		echo_vision_toggled.emit()
 
 func _draw() -> void:
 	if character_state == GameEnums.CharacterState.VENTING:
@@ -80,8 +83,11 @@ func _draw() -> void:
 	var is_dead := (character_state == GameEnums.CharacterState.DEAD)
 	CrewmateRenderer.draw_astronaut(self, Vector2.ZERO, role, is_dead, walk_time, is_facing_left, true)
 
+func is_saboteur() -> bool:
+	return role == GameEnums.Role.INFILTRATOR or role == GameEnums.Role.DISRUPTOR or role == GameEnums.Role.SABOTEUR_IMPOSTOR
+
 func can_kill() -> bool:
-	return role == GameEnums.Role.SABOTEUR_IMPOSTOR and character_state == GameEnums.CharacterState.ALIVE and kill_cooldown <= 0.0
+	return is_saboteur() and character_state == GameEnums.CharacterState.ALIVE and kill_cooldown <= 0.0
 
 func reset_kill_cooldown() -> void:
 	kill_cooldown = max_kill_cooldown
