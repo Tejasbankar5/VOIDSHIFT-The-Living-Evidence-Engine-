@@ -26,7 +26,22 @@ static func draw_station(canvas: CanvasItem, anim_time: float, completed_tasks: 
 	var is_critical_sabotage: bool = (sabotage_type != 0 and sabotage_type != GameEnums.SabotageType.NONE)
 
 	# -------------------------------------------------------------------------
-	# 1. ATMOSPHERIC BACKDROP & SECTOR VISTA
+	# 1. ILLUSTRATED MASTER ENVIRONMENT BACKDROP
+	# -------------------------------------------------------------------------
+	var bg_tex := get_environment_texture(campaign_mode)
+
+	if bg_tex != null:
+		canvas.draw_texture_rect(bg_tex, Rect2(0, 0, 1280, 720), false)
+		if campaign_mode == GameEnums.CampaignMode.HOLLOW_CROWN:
+			draw_hollow_crown_atmosphere(canvas, anim_time, clues)
+		else:
+			draw_blackglass_atmosphere(canvas, anim_time, clues)
+		if echo_vision_active:
+			draw_echo_vision_overlay(canvas, anim_time, clues)
+		return
+
+	# -------------------------------------------------------------------------
+	# 1B. PROCEDURAL FALLBACK ATMOSPHERIC BACKDROP & SECTOR VISTA
 	# -------------------------------------------------------------------------
 	match campaign_mode:
 		GameEnums.CampaignMode.HOLLOW_CROWN:
@@ -502,3 +517,111 @@ static func draw_echo_vision_overlay(canvas: CanvasItem, anim_time: float, clues
 		# Forensic Label Tag
 		var label_str: String = "[ANALYZED] %s" % clue.name if is_col else "[ECHO TRACE: %s - PRESS E]" % clue.name
 		canvas.draw_string(ThemeDB.fallback_font, Vector2(cpos.x - 80, cpos.y - 28), label_str, HORIZONTAL_ALIGNMENT_CENTER, 220, 10, reticle_col)
+
+# =========================================================================
+# 11. ILLUSTRATED ENVIRONMENT OVERHAULS & ATMOSPHERIC PARTICLES
+# =========================================================================
+static func draw_hollow_crown_atmosphere(canvas: CanvasItem, anim_time: float, clues: Array) -> void:
+	# Subtle lantern glows with soft breathing flicker
+	var lantern_glow: float = 0.45 + sin(anim_time * 3.5) * 0.08
+	var lantern_positions: Array[Vector2] = [
+		Vector2(430, 600), # Moon Gate
+		Vector2(560, 490), # Courtyard
+		Vector2(740, 500), # Pond / Bridge
+		Vector2(980, 420), # Inner Shrine
+		Vector2(460, 320), # Archive
+		Vector2(250, 460)  # Tea Room
+	]
+	for l_pos in lantern_positions:
+		canvas.draw_circle(l_pos, 45.0, Color(1.0, 0.85, 0.4, 0.05 * lantern_glow))
+		canvas.draw_circle(l_pos, 22.0, Color(1.0, 0.88, 0.5, 0.12 * lantern_glow))
+
+	# Falling Sakura Blossom Petals
+	for i in range(35):
+		var seed_val: float = float(i) * 37.0
+		var px: float = fmod(seed_val * 19.0 + anim_time * 35.0, 1340.0) - 40.0
+		var py: float = fmod(seed_val * 43.0 + anim_time * 45.0 + sin(anim_time * 2.0 + float(i)) * 20.0, 760.0) - 20.0
+		var rot: float = anim_time * 1.5 + float(i)
+		var p_size: float = 4.0 + fmod(float(i), 3.0)
+		var pts: PackedVector2Array = [
+			Vector2(px, py) + Vector2(-p_size, 0).rotated(rot),
+			Vector2(px, py) + Vector2(0, -p_size * 1.6).rotated(rot),
+			Vector2(px, py) + Vector2(p_size, 0).rotated(rot),
+			Vector2(px, py) + Vector2(0, p_size * 0.8).rotated(rot)
+		]
+		canvas.draw_colored_polygon(pts, Color(1.0, 0.78, 0.85, 0.65))
+
+	# Clue Interactive Reticles
+	for clue in clues:
+		var cpos: Vector2 = clue.position
+		var is_col: bool = clue.is_collected
+		var reticle_col := Color(0.2, 0.9, 0.4) if is_col else Color(0.0, 0.85, 1.0)
+		var rad: float = 14.0 + sin(anim_time * 4.0) * 2.5
+		canvas.draw_arc(cpos, rad, 0, TAU, 24, reticle_col, 1.8, true)
+		canvas.draw_circle(cpos, 3.5, reticle_col)
+
+static func draw_blackglass_atmosphere(canvas: CanvasItem, anim_time: float, clues: Array) -> void:
+	# Containment Cylinder Volumetric Cyan Pulse (Research Lab)
+	var lab_cyl_pos := Vector2(720, 430)
+	var pulse := 0.6 + sin(anim_time * 3.0) * 0.25
+	canvas.draw_circle(lab_cyl_pos, 65.0, Color(0.0, 0.88, 1.0, 0.06 * pulse))
+	canvas.draw_circle(lab_cyl_pos, 35.0, Color(0.0, 0.95, 1.0, 0.15 * pulse))
+
+	# Reactor Core Warning Pulse (Engineering Bay)
+	var reactor_pos := Vector2(780, 640)
+	var red_pulse := 0.5 + sin(anim_time * 4.5) * 0.3
+	canvas.draw_circle(reactor_pos, 50.0, Color(1.0, 0.2, 0.25, 0.08 * red_pulse))
+	canvas.draw_circle(reactor_pos, 25.0, Color(1.0, 0.35, 0.2, 0.18 * red_pulse))
+
+	# Twinkling Stars in Observation Window
+	var stars: Array[Vector2] = [
+		Vector2(380, 140), Vector2(480, 120), Vector2(580, 130),
+		Vector2(700, 110), Vector2(820, 150)
+	]
+	for s in stars:
+		var st_alpha := 0.4 + sin(anim_time * 2.0 + s.x) * 0.3
+		canvas.draw_circle(s, 1.5, Color(1, 1, 1, st_alpha))
+
+	# Clue Interactive Reticles
+	for clue in clues:
+		var cpos: Vector2 = clue.position
+		var is_col: bool = clue.is_collected
+		var reticle_col := Color(0.2, 0.9, 0.4) if is_col else Color(0.0, 0.85, 1.0)
+		var rad: float = 14.0 + sin(anim_time * 4.0) * 2.5
+		canvas.draw_arc(cpos, rad, 0, TAU, 24, reticle_col, 1.8, true)
+		canvas.draw_circle(cpos, 3.5, reticle_col)
+
+static func draw_room_tag(canvas: CanvasItem, pos: Vector2, text: String) -> void:
+	var font_size: int = 10
+	var text_size := ThemeDB.fallback_font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
+	var bg_rect := Rect2(pos.x - 8, pos.y - 12, text_size.x + 16, 18)
+	canvas.draw_rect(bg_rect, Color(0.04, 0.07, 0.12, 0.75))
+	canvas.draw_rect(bg_rect, Color(0.0, 0.85, 1.0, 0.4), false, 1.0)
+	canvas.draw_string(ThemeDB.fallback_font, pos + Vector2(0, 1), text, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, Color(0.9, 0.95, 1.0))
+
+static var _cached_hollow_crown_bg: Texture2D = null
+static var _cached_blackglass_bg: Texture2D = null
+
+static func get_environment_texture(mode: GameEnums.CampaignMode) -> Texture2D:
+	if mode == GameEnums.CampaignMode.HOLLOW_CROWN:
+		if _cached_hollow_crown_bg == null:
+			var path := "res://assets/environments/hollow_crown.png"
+			var gpath := ProjectSettings.globalize_path(path)
+			var img := Image.load_from_file(gpath)
+			if img != null and not img.is_empty():
+				_cached_hollow_crown_bg = ImageTexture.create_from_image(img)
+			elif ResourceLoader.exists(path):
+				_cached_hollow_crown_bg = load(path)
+		return _cached_hollow_crown_bg
+	else:
+		if _cached_blackglass_bg == null:
+			var path := "res://assets/environments/blackglass.png"
+			var gpath := ProjectSettings.globalize_path(path)
+			var img := Image.load_from_file(gpath)
+			if img != null and not img.is_empty():
+				_cached_blackglass_bg = ImageTexture.create_from_image(img)
+			elif ResourceLoader.exists(path):
+				_cached_blackglass_bg = load(path)
+		return _cached_blackglass_bg
+
+

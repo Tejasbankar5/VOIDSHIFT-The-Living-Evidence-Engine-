@@ -18,6 +18,7 @@ const StationData = preload("res://scripts/core/StationData.gd")
 const CrewmateAI = preload("res://scripts/ai/CrewmateAI.gd")
 const BriefingScreen = preload("res://scripts/ui/BriefingScreen.gd")
 const DebriefScreen = preload("res://scripts/ui/DebriefScreen.gd")
+const InterrogationDialog = preload("res://scripts/ui/InterrogationDialog.gd")
 
 @onready var station_map: StationMap = $StationMap
 @onready var player: PlayerController = $Player
@@ -28,6 +29,7 @@ const DebriefScreen = preload("res://scripts/ui/DebriefScreen.gd")
 @onready var meeting_screen: MeetingScreen = $CanvasLayer/MeetingScreen
 @onready var evidence_screen: EvidenceScreen = $CanvasLayer/EvidenceScreen
 @onready var task_dialog: TaskDialog = $CanvasLayer/TaskDialog
+@onready var interrogation_dialog: InterrogationDialog = $CanvasLayer/InterrogationDialog
 @onready var academic_lab: AcademicLab = $CanvasLayer/AcademicLab
 @onready var audio_synth: AudioSynthesizer = $AudioSynthesizer
 
@@ -69,6 +71,7 @@ func _ready() -> void:
 	debrief_screen.main_menu_requested.connect(_on_return_to_main_menu)
 	meeting_screen.meeting_concluded.connect(_on_meeting_concluded)
 	academic_lab.exit_requested.connect(_on_exit_academic_lab)
+	interrogation_dialog.dialogue_closed.connect(_on_interrogation_closed)
 
 	# Connect Player Signals
 	player.task_requested.connect(_on_player_interaction_requested)
@@ -146,7 +149,12 @@ func get_contextual_prompt() -> String:
 	if player.character_state == GameEnums.CharacterState.DEAD:
 		return "[DEAD] You are wandering as a ghost observer."
 
-	# 1. Nearby Undiscovered Echo Clue
+	# 1. Nearby Suspect to question
+	var nearby_suspect := get_nearby_suspect(player.global_position)
+	if nearby_suspect != null:
+		return "[E] Question %s (%s)" % [nearby_suspect.name, nearby_suspect.title]
+
+	# 2. Nearby Undiscovered Echo Clue
 	var nearby_clue := station_map.get_nearby_echo_clue(player.global_position)
 	if nearby_clue != null:
 		return "[E] Analyze Echo Trace: %s" % nearby_clue.name
@@ -195,7 +203,9 @@ func set_state(new_state: GameEnums.GameState) -> void:
 	debrief_screen.visible = (new_state == GameEnums.GameState.DEBRIEF_ENDING)
 	hud.visible = (new_state == GameEnums.GameState.GAMEPLAY or new_state == GameEnums.GameState.TASK_MINIGAME)
 	academic_lab.visible = (new_state == GameEnums.GameState.ACADEMIC_LAB)
-	task_dialog.visible = (new_state == GameEnums.GameState.TASK_MINIGAME)
+	task_dialog.visible = (new_state == GameEnums.GameState.TASK_MINIGAME and not interrogation_dialog.visible)
+	if new_state != GameEnums.GameState.TASK_MINIGAME:
+		interrogation_dialog.visible = false
 	evidence_screen.visible = (new_state == GameEnums.GameState.EVIDENCE_DOSSIER)
 	meeting_screen.visible = (new_state == GameEnums.GameState.MEETING)
 
@@ -297,7 +307,23 @@ func deploy_match() -> void:
 # INTERACTION & ECHO VISION HANDLING
 # =========================================================================
 func _on_player_interaction_requested() -> void:
-	# 1. Check if near an undiscovered Echo Clue
+	# 1. Check nearby Suspect to question
+	var nearby_suspect := get_nearby_suspect(player.global_position)
+	if nearby_suspect != null:
+		set_state(GameEnums.GameState.TASK_MINIGAME)
+		task_dialog.visible = false
+		interrogation_dialog.open_interrogation(nearby_suspect, active_campaign, evidence_engine)
+		# Complete relevant checklist tasks
+		if active_campaign_mode == GameEnums.CampaignMode.HOLLOW_CROWN:
+			if nearby_suspect.id == "sora" or nearby_suspect.id == "kenji" or nearby_suspect.id == "aiko":
+				check_off_task_by_id("question_attendants")
+		elif active_campaign_mode == GameEnums.CampaignMode.BLACKGLASS_STATION:
+			if nearby_suspect.id == "elara" or nearby_suspect.id == "kael":
+				check_off_task_by_id("talk_crew")
+		audio_synth.play_beep(660.0, 0.12)
+		return
+
+	# 2. Check nearby undiscovered Echo Clue
 	var nearby_clue := station_map.get_nearby_echo_clue(player.global_position)
 	if nearby_clue != null:
 		nearby_clue.is_collected = true
@@ -312,20 +338,56 @@ func _on_player_interaction_requested() -> void:
 			"Forensic Clue Discovered: %s (%s)" % [nearby_clue.name, nearby_clue.forensic_detail],
 			false
 		)
+		# Check off relevant checklist tasks
+		if nearby_clue.id == "clue_garden_path":
+			check_off_task_by_id("garden_path")
+		elif nearby_clue.id == "clue_inner_shrine":
+			check_off_task_by_id("ceremonial_hall")
+		elif nearby_clue.id == "clue_tea_set":
+			check_off_task_by_id("question_attendants")
+		elif nearby_clue.id == "clue_ancient_records":
+			check_off_task_by_id("analyze_records")
+		elif nearby_clue.id == "clue_containment_chamber":
+			check_off_task_by_id("examine_chamber")
+		elif nearby_clue.id == "clue_scrubbed_logs":
+			check_off_task_by_id("review_records")
+		elif nearby_clue.id == "clue_manual_surge":
+			check_off_task_by_id("inspect_reactor")
+
 		audio_synth.play_beep(880.0, 0.20)
 		station_map.queue_redraw()
 		return
 
-	# 2. Check Emergency Button
+	# 3. Check Emergency Button
 	if station_map.is_near_emergency_button(player.global_position):
 		start_emergency_meeting(player.player_name, "")
 		return
 
-	# 3. Check Maintenance Task
+	# 4. Check Maintenance Task
 	var nearby_task := station_map.get_nearby_task(player.global_position)
 	if nearby_task != null:
 		set_state(GameEnums.GameState.TASK_MINIGAME)
+		interrogation_dialog.visible = false
 		task_dialog.open(nearby_task)
+
+func get_nearby_suspect(pos: Vector2, max_dist: float = 65.0) -> CampaignData.SuspectDef:
+	if not active_campaign:
+		return null
+	for s in active_campaign.suspects:
+		if pos.distance_to(s.position) <= max_dist:
+			return s
+	return null
+
+func check_off_task_by_id(task_id_str: String) -> void:
+	if not active_campaign:
+		return
+	for task in active_campaign.checklist_tasks:
+		if task.get("id", "") == task_id_str:
+			task["done"] = true
+			break
+
+func _on_interrogation_closed() -> void:
+	set_state(GameEnums.GameState.GAMEPLAY)
 
 func _on_player_echo_vision_toggled() -> void:
 	echo_vision_active = !echo_vision_active

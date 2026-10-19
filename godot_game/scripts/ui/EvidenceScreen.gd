@@ -198,31 +198,38 @@ func draw_hypothesis_tab(content_rect: Rect2) -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(content_rect.position.x + 25, y), "FORENSIC HYPOTHESIS COMPARISON MATRIX // CLAIMS VS GROUND TRUTH", HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(0.0, 0.85, 1.0))
 	y += 30.0
 
-	var roster := ["Nova", "Astra", "Vance", "Kael", "Lyra", "Orion", "Thorne", "Vesper", "Silas"]
-	for i in range(mini(6, roster.size())):
-		var s_name: String = roster[i]
-		var card_rect := Rect2(content_rect.position.x + 25, y, content_rect.size.x - 50, 60)
+	var suspects: Array = active_campaign.suspects if active_campaign else []
+	for i in range(suspects.size()):
+		var suspect = suspects[i]
+		var card_rect := Rect2(content_rect.position.x + 25, y, content_rect.size.x - 50, 68)
 		draw_rect(card_rect, Color(0.06, 0.09, 0.14))
 		draw_rect(card_rect, Color(0.2, 0.35, 0.5), false, 1.0)
 
-		# Name & Claim
-		draw_string(ThemeDB.fallback_font, Vector2(card_rect.position.x + 15, y + 24), s_name, HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1))
-		var claim_str := "\"Maintained sector instruments and reported no suspicious access.\""
-		draw_string(ThemeDB.fallback_font, Vector2(card_rect.position.x + 15, y + 46), claim_str, HORIZONTAL_ALIGNMENT_LEFT, 550, 11, Color(0.75, 0.85, 0.9))
+		# Name & Title
+		var name_hdr := "%s  —  %s" % [suspect.name, suspect.title]
+		draw_string(ThemeDB.fallback_font, Vector2(card_rect.position.x + 15, y + 22), name_hdr, HORIZONTAL_ALIGNMENT_LEFT, 450, 13, Color(1, 1, 1))
+		var claim_str := "\"%s\"" % suspect.alibi
+		draw_string(ThemeDB.fallback_font, Vector2(card_rect.position.x + 15, y + 46), claim_str, HORIZONTAL_ALIGNMENT_LEFT, 540, 11, Color(0.75, 0.85, 0.9))
 
-		# Evaluation Badge: Compare against evidence engine
-		var status_text := "[SUPPORTED]"
-		var status_col := Color(0.2, 0.9, 0.4)
-		if s_name == "Vance" and active_campaign and active_campaign.id == "blackglass_station":
-			status_text = "[CONTRADICTED: PURGED TIMESTAMP AT 03:12]"
+		# Evaluation: check if any collected clue contradicts this suspect
+		var has_contradiction: bool = false
+		var contra_detail: String = ""
+		if active_campaign != null:
+			for clue in active_campaign.clues:
+				if clue.is_collected and clue.contradiction_target == suspect.id:
+					has_contradiction = true
+					contra_detail = clue.name
+					break
+
+		var status_text: String
+		var status_col: Color
+		if has_contradiction:
+			status_text = "[CONTRADICTED: %s]" % contra_detail.to_upper()
 			status_col = Color(1.0, 0.25, 0.25)
-		elif s_name == "Thorne" and active_campaign and active_campaign.id == "hollow_crown":
-			status_text = "[CONTRADICTED: TREAD TRACKS AT VAULT]"
-			status_col = Color(1.0, 0.25, 0.25)
-		elif s_name == "Silas" and active_campaign and active_campaign.id == "last_signal":
-			status_text = "[COMPROMISED: TEMPORAL ECHO DISCREPANCY]"
-			status_col = Color(0.8, 0.4, 1.0)
+		else:
+			status_text = "[ALIBI UNCONTRADICTED — PENDING FURTHER TRACES]"
+			status_col = Color(0.3, 0.75, 0.95)
 
-		draw_string(ThemeDB.fallback_font, Vector2(card_rect.end.x - 380, y + 35), status_text, HORIZONTAL_ALIGNMENT_RIGHT, 360, 11, status_col)
+		draw_string(ThemeDB.fallback_font, Vector2(card_rect.end.x - 390, y + 35), status_text, HORIZONTAL_ALIGNMENT_RIGHT, 370, 11, status_col)
 
-		y += 68.0
+		y += 75.0

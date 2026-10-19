@@ -81,7 +81,7 @@ func _draw() -> void:
 	if character_state == GameEnums.CharacterState.VENTING:
 		return
 	var is_dead := (character_state == GameEnums.CharacterState.DEAD)
-	CrewmateRenderer.draw_astronaut(self, Vector2.ZERO, role, is_dead, walk_time, is_facing_left, true)
+	CrewmateRenderer.draw_character(self, Vector2.ZERO, player_name, role, is_dead, walk_time, is_facing_left, true)
 
 func is_saboteur() -> bool:
 	return role == GameEnums.Role.INFILTRATOR or role == GameEnums.Role.DISRUPTOR or role == GameEnums.Role.SABOTEUR_IMPOSTOR

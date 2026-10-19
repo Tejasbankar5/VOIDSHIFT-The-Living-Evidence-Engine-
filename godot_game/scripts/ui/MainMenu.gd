@@ -18,10 +18,9 @@ signal academic_lab_requested()
 enum MenuOption {
 	CAMPAIGN_HOLLOW_CROWN = 0,
 	CAMPAIGN_BLACKGLASS = 1,
-	CAMPAIGN_LAST_SIGNAL = 2,
-	ACADEMIC_LAB = 3,
-	SETTINGS_STATS = 4,
-	QUIT = 5
+	ACADEMIC_LAB = 2,
+	SETTINGS_STATS = 3,
+	QUIT = 4
 }
 
 var selected_option: int = 0
@@ -54,9 +53,9 @@ func _unhandled_input(event: InputEvent) -> void:
 
 		match event.keycode:
 			KEY_W, KEY_UP:
-				selected_option = (selected_option - 1 + 6) % 6
+				selected_option = (selected_option - 1 + 5) % 5
 			KEY_S, KEY_DOWN:
-				selected_option = (selected_option + 1) % 6
+				selected_option = (selected_option + 1) % 5
 			KEY_ENTER, KEY_SPACE:
 				activate_option()
 			KEY_G:
@@ -76,7 +75,7 @@ func _gui_input(event: InputEvent) -> void:
 		var mpos := mouse_ev.position
 		hovered_option = -1
 		var y := 245.0
-		for i in range(6):
+		for i in range(5):
 			var btn_rect := Rect2(card_x, y, card_w, 48)
 			if btn_rect.has_point(mpos):
 				hovered_option = i
@@ -92,7 +91,7 @@ func _gui_input(event: InputEvent) -> void:
 		var mouse_ev := event as InputEventMouseButton
 		var mpos := mouse_ev.position
 		var y := 245.0
-		for i in range(6):
+		for i in range(5):
 			var btn_rect := Rect2(card_x, y, card_w, 48)
 			if btn_rect.has_point(mpos):
 				selected_option = i
@@ -107,9 +106,6 @@ func activate_option() -> void:
 			start_game_requested.emit(false)
 		MenuOption.CAMPAIGN_BLACKGLASS:
 			campaign_selected.emit(GameEnums.CampaignMode.BLACKGLASS_STATION)
-			start_game_requested.emit(false)
-		MenuOption.CAMPAIGN_LAST_SIGNAL:
-			campaign_selected.emit(GameEnums.CampaignMode.THE_LAST_SIGNAL)
 			start_game_requested.emit(false)
 		MenuOption.ACADEMIC_LAB:
 			academic_lab_requested.emit()
@@ -145,7 +141,7 @@ func _draw() -> void:
 
 	# 5. Footer Academic & System Info
 	draw_string(ThemeDB.fallback_font, Vector2(0, vp.y - 20),
-		"VOIDSHIFT ENGINE v2.0  •  THE LIVING EVIDENCE ENGINE  •  THREE ORIGINAL NARRATIVE CAMPAIGNS",
+		"VOIDSHIFT ENGINE v2.0  •  THE LIVING EVIDENCE ENGINE  •  TWO DEFINITIVE NARRATIVE MYSTERIES",
 		HORIZONTAL_ALIGNMENT_CENTER, int(vp.x), 10, Color(0.38, 0.52, 0.68))
 
 func draw_cosmic_space_vista(vp: Vector2) -> void:
@@ -240,9 +236,8 @@ func draw_title_header(vp: Vector2) -> void:
 
 func draw_action_cards(vp: Vector2) -> void:
 	var options := [
-		{"title": "1. THE HOLLOW CROWN", "sub": "Archaeological Sci-Fi Mystery — Buried Alien Complex", "tag": "CAMPAIGN I", "primary": true, "accent": Color(0.9, 0.75, 0.35)},
-		{"title": "2. BLACKGLASS STATION", "sub": "Forensic Noir Mystery — Failing Orbital Outpost", "tag": "CAMPAIGN II", "primary": true, "accent": Color(0.0, 0.85, 1.0)},
-		{"title": "3. THE LAST SIGNAL", "sub": "Polar Survival Mystery — Sub-Ice Temporal Anomaly", "tag": "CAMPAIGN III", "primary": true, "accent": Color(0.6, 0.85, 1.0)},
+		{"title": "1. THE HOLLOW CROWN", "sub": "Japanese Estate Mystery — Moonlight, Shadows & Missing Relic", "tag": "STORY I", "primary": true, "accent": Color(0.95, 0.75, 0.35)},
+		{"title": "2. BLACKGLASS STATION", "sub": "Sci-Fi Mystery — Silent Spacecraft & Vanished Prototype", "tag": "STORY II", "primary": true, "accent": Color(0.0, 0.88, 1.0)},
 		{"title": "CG ACADEMIC LAB", "sub": "12 Interactive syllabus visualization modes [Key: G]", "tag": "SYLLABUS", "primary": false, "accent": Color(0.2, 0.9, 0.6)},
 		{"title": "SYSTEM DOSSIER & PROTOCOLS", "sub": "Offline career match history, forensic rules & guide", "tag": "DOSSIER", "primary": false, "accent": Color(0.7, 0.6, 0.9)},
 		{"title": "ABORT MISSION", "sub": "Exit application to desktop", "tag": "EXIT", "primary": false, "accent": Color(0.8, 0.3, 0.3)}
@@ -250,7 +245,7 @@ func draw_action_cards(vp: Vector2) -> void:
 
 	var card_w: float = 520.0
 	var card_x: float = (vp.x - card_w) * 0.5
-	var y := 240.0
+	var y := 245.0
 
 	for i in range(options.size()):
 		var is_selected := (selected_option == i)
@@ -293,7 +288,7 @@ func draw_action_cards(vp: Vector2) -> void:
 		draw_rect(tag_rect, border_col, false, 1.0)
 		draw_string(ThemeDB.fallback_font, Vector2(tag_rect.position.x, y + 28), opt["tag"], HORIZONTAL_ALIGNMENT_CENTER, 80, 9, border_col)
 
-		y += 55.0
+		y += 56.0
 
 func draw_settings_modal(vp: Vector2) -> void:
 	var modal_w: float = 880.0
@@ -309,14 +304,13 @@ func draw_settings_modal(vp: Vector2) -> void:
 	var lines := [
 		"EXPEDITION DOSSIER (Saved locally to user://voidshift_save.json):",
 		"- Missions Deployed: %d" % stats.get("matches_played", 0),
-		"- Crewmate Victories (Saboteur Unmasked): %d" % stats.get("crewmate_victories", 0),
-		"- Saboteur Victories (Station Compromised): %d" % stats.get("saboteur_victories", 0),
-		"- Total Maintenance Tasks Verified: %d" % stats.get("tasks_completed_lifetime", 0),
+		"- Crew Victories (Culprit Unmasked): %d" % stats.get("crewmate_victories", 0),
+		"- Saboteur Victories (Incident Unresolved): %d" % stats.get("saboteur_victories", 0),
+		"- Total Clues Recovered & Verified: %d" % stats.get("tasks_completed_lifetime", 0),
 		"",
-		"THREE NARRATIVE CAMPAIGNS:",
-		"- THE HOLLOW CROWN: Subterranean alien ruins. Recover the Hollow Crown before containment collapse.",
-		"- BLACKGLASS STATION: Forensic murder mystery. Examine shattered neurotoxin vials & scrubbed CCTV logs.",
-		"- THE LAST SIGNAL: Sub-ice polar facility. Decode repeating acoustic waves & resolve temporal echo anomalies.",
+		"TWO DEFINITIVE NARRATIVE MYSTERIES:",
+		"- THE HOLLOW CROWN: Japanese mountain estate. Discover how the sacred relic vanished from the sealed inner shrine.",
+		"- BLACKGLASS STATION: Deep-space research vessel. Investigate the blackout, missing prototype, and breached laboratory.",
 		"",
 		"CONTROLS: WASD = Move | E = Contextual Interact | Q = Echo Vision | TAB = Evidence Workstation | ESC = Back",
 		"",
@@ -324,7 +318,7 @@ func draw_settings_modal(vp: Vector2) -> void:
 	]
 	var y := modal.position.y + 80.0
 	for l in lines:
-		var col := Color(0.0, 0.92, 0.8) if (l.begins_with("EXPEDITION") or l.begins_with("THREE") or l.begins_with("CONTROLS")) else Color(0.85, 0.92, 0.98)
+		var col := Color(0.0, 0.92, 0.8) if (l.begins_with("EXPEDITION") or l.begins_with("TWO") or l.begins_with("CONTROLS")) else Color(0.85, 0.92, 0.98)
 		draw_string(ThemeDB.fallback_font, Vector2(modal.position.x + 36, y), l, HORIZONTAL_ALIGNMENT_LEFT, int(modal_w - 72), 11, col)
 		y += 26.0
 

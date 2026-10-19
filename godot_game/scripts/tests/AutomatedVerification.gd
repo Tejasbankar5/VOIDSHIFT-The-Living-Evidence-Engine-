@@ -265,8 +265,7 @@ func test_role_allocation() -> bool:
 func test_campaign_integrity() -> bool:
 	var modes := [
 		GameEnums.CampaignMode.HOLLOW_CROWN,
-		GameEnums.CampaignMode.BLACKGLASS_STATION,
-		GameEnums.CampaignMode.THE_LAST_SIGNAL
+		GameEnums.CampaignMode.BLACKGLASS_STATION
 	]
 
 	for m in modes:
