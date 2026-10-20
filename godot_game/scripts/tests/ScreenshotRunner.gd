@@ -64,14 +64,23 @@ func _process(_delta: float) -> void:
 		# 4. Capture Blackglass Station Gameplay
 		save_frame_as("blackglass_gameplay.png", "blackglass.png")
 
-		# Switch to Campaign 3: The Last Signal
+		# Open Pause Menu to capture Tactical Pause Matrix
 		if main_inst != null:
+			main_inst.open_pause_menu()
+
+	elif frames == 105:
+		# 5. Capture Tactical Pause Matrix
+		save_frame_as("pause_menu_matrix.png", "pause_menu.png")
+
+		# Resume and switch to Campaign 3: The Last Signal
+		if main_inst != null:
+			main_inst._on_resume_from_pause()
 			main_inst._on_campaign_selected(GameEnums.CampaignMode.THE_LAST_SIGNAL)
 			main_inst._on_deploy_requested()
 			main_inst.player.global_position = Vector2(750, 1050)
 
-	elif frames == 120:
-		# 5. Capture The Last Signal Gameplay
+	elif frames == 130:
+		# 6. Capture The Last Signal Gameplay
 		save_frame_as("last_signal_gameplay.png", "last_signal.png")
 		get_tree().quit(0)
 

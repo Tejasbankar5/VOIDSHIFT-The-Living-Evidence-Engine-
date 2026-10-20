@@ -88,8 +88,21 @@ func update_ai(delta: float, room_waypoints: Array[Vector2], task_positions: Arr
 			velocity = Vector2.ZERO
 			walk_time = 0.0
 			if task_perform_timer <= 0.0:
+				if evidence_engine != null:
+					var r_name := current_room_name if current_room_name != "" else "Station Sector"
+					evidence_engine.record_event(
+						match_time,
+						GameEnums.EventType.COMPLETE_TASK,
+						bot_id,
+						bot_name,
+						-1, "",
+						current_room_id,
+						r_name,
+						"AI Specialist %s completed maintenance routine in %s" % [bot_name, r_name],
+						false
+					)
 				ai_state = AIState.WANDERING
-				state_timer = 0.0
+				state_timer = randf_range(3.0, 6.0)
 			move_and_slide()
 			queue_redraw()
 			return
@@ -111,7 +124,14 @@ func update_ai(delta: float, room_waypoints: Array[Vector2], task_positions: Arr
 		_:
 			# Standard wandering or moving to task
 			var dist_to_target: float = global_position.distance_to(target_waypoint)
-			if dist_to_target < 24.0 or state_timer <= 0.0:
+			if ai_state == AIState.MOVING_TO_TASK and dist_to_target < 28.0:
+				ai_state = AIState.PERFORMING_TASK
+				task_perform_timer = randf_range(3.0, 5.5)
+				velocity = Vector2.ZERO
+				move_and_slide()
+				queue_redraw()
+				return
+			elif dist_to_target < 24.0 or state_timer <= 0.0:
 				decide_next_behavior(room_waypoints, task_positions, all_characters)
 
 	# 4. Move toward waypoint

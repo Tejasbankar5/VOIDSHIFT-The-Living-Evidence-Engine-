@@ -9,6 +9,9 @@ var player_audio: AudioStreamPlayer = null
 var generator: AudioStreamGenerator = null
 var playback: AudioStreamGeneratorPlayback = null
 
+var is_muted: bool = false
+var master_volume: float = 1.0
+
 func _ready() -> void:
 	player_audio = AudioStreamPlayer.new()
 	generator = AudioStreamGenerator.new()
@@ -19,19 +22,29 @@ func _ready() -> void:
 	player_audio.play()
 	playback = player_audio.get_stream_playback() as AudioStreamGeneratorPlayback
 
+func toggle_mute() -> bool:
+	is_muted = !is_muted
+	return is_muted
+
+func set_volume(vol: float) -> void:
+	master_volume = clampf(vol, 0.0, 1.0)
+
 func play_beep(freq: float = 880.0, duration_sec: float = 0.08) -> void:
-	if playback == null:
+	if playback == null or is_muted:
 		return
 	var sample_count := int(22050.0 * duration_sec)
 	for i in range(sample_count):
 		var t: float = float(i) / 22050.0
 		var envelope: float = 1.0 - (float(i) / float(sample_count))
-		var sample: float = sin(t * freq * TAU) * envelope * 0.25
+		var sample: float = sin(t * freq * TAU) * envelope * 0.25 * master_volume
 		playback.push_frame(Vector2(sample, sample))
 
 func play_task_success() -> void:
 	play_beep(660.0, 0.08)
 	play_beep(880.0, 0.12)
+
+func play_task_complete() -> void:
+	play_task_success()
 
 func play_kill_sting() -> void:
 	play_beep(220.0, 0.3)
@@ -39,3 +52,4 @@ func play_kill_sting() -> void:
 func play_emergency_alarm() -> void:
 	play_beep(520.0, 0.15)
 	play_beep(780.0, 0.15)
+

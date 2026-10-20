@@ -13,6 +13,7 @@
 [ext_resource type="Script" path="res://scripts/ui/TaskDialog.gd" id="9_task"]
 [ext_resource type="Script" path="res://scripts/academic/AcademicLab.gd" id="10_lab"]
 [ext_resource type="Script" path="res://scripts/ui/SabotageDialog.gd" id="11_sabotage"]
+[ext_resource type="Script" path="res://scripts/ui/PauseMenu.gd" id="12_pause"]
 
 [node name="Main" type="Node2D"]
 script = ExtResource("1_manager")
@@ -109,3 +110,14 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("11_sabotage")
+
+[node name="PauseMenu" type="Control" parent="CanvasLayer"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("12_pause")
+

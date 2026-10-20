@@ -58,16 +58,15 @@ func _unhandled_input(event: InputEvent) -> void:
 				selected_option = (selected_option - 1 + 6) % 6
 			KEY_S, KEY_DOWN:
 				selected_option = (selected_option + 1) % 6
-			KEY_T:
-				cycle_role_preference()
+			KEY_F2:
+				# Rule 30: Development-only deterministic seed toggle for reproducible testing
+				debug_seed = (debug_seed + 42) % 300
 			KEY_ENTER, KEY_SPACE:
 				activate_option()
 			KEY_G:
 				academic_lab_requested.emit()
 
-func cycle_role_preference() -> void:
-	role_preference = (role_preference + 1) % 3
-	queue_redraw()
+var debug_seed: int = -1
 
 func _gui_input(event: InputEvent) -> void:
 	if not visible:
@@ -82,7 +81,7 @@ func _gui_input(event: InputEvent) -> void:
 		var mouse_ev := event as InputEventMouseMotion
 		var mpos := mouse_ev.position
 		hovered_option = -1
-		var y := 245.0
+		var y := 235.0
 		for i in range(6):
 			var btn_rect := Rect2(card_x, y, card_w, 48)
 			if btn_rect.has_point(mpos):
@@ -99,13 +98,7 @@ func _gui_input(event: InputEvent) -> void:
 		var mouse_ev := event as InputEventMouseButton
 		var mpos := mouse_ev.position
 
-		# Check role preference toggle click
-		var role_rect := Rect2(card_x, 196, card_w, 34)
-		if role_rect.has_point(mpos):
-			cycle_role_preference()
-			return
-
-		var y := 245.0
+		var y := 235.0
 		for i in range(6):
 			var btn_rect := Rect2(card_x, y, card_w, 48)
 			if btn_rect.has_point(mpos):
@@ -146,7 +139,6 @@ func _draw() -> void:
 
 	# 3. Main Title & Living Evidence Engine Header
 	draw_title_header(vp)
-	draw_role_preference_pill(vp)
 
 	if show_how_to_play:
 		draw_how_to_play_modal(vp)
@@ -305,7 +297,7 @@ func draw_action_cards(vp: Vector2) -> void:
 
 	var card_w: float = 520.0
 	var card_x: float = (vp.x - card_w) * 0.5
-	var y := 240.0
+	var y := 235.0
 
 	for i in range(options.size()):
 		var is_selected := (selected_option == i)

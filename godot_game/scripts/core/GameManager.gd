@@ -27,6 +27,7 @@ const CrewmateAI = preload("res://scripts/ai/CrewmateAI.gd")
 @onready var task_dialog: TaskDialog = $CanvasLayer/TaskDialog
 @onready var sabotage_dialog: SabotageDialog = $CanvasLayer/SabotageDialog
 @onready var academic_lab: AcademicLab = $CanvasLayer/AcademicLab
+@onready var pause_menu: PauseMenu = $CanvasLayer/PauseMenu
 @onready var audio_synth: AudioSynthesizer = $AudioSynthesizer
 
 var current_state: GameEnums.GameState = GameEnums.GameState.MAIN_MENU
@@ -74,6 +75,9 @@ func _ready() -> void:
 	evidence_screen.close_requested.connect(_on_evidence_screen_closed)
 	sabotage_dialog.sabotage_selected.connect(_on_sabotage_selected_from_dialog)
 	sabotage_dialog.closed.connect(_on_sabotage_dialog_closed)
+	pause_menu.resume_requested.connect(_on_resume_from_pause)
+	pause_menu.return_to_menu_requested.connect(_on_return_to_main_menu)
+	pause_menu.mute_toggled.connect(_on_pause_menu_mute_toggled)
 
 	# Connect Player Signals
 	player.task_requested.connect(_on_player_interaction_requested)
@@ -176,6 +180,8 @@ func get_contextual_prompt() -> String:
 	# 5. Sector Maintenance Task
 	var nearby_task := station_map.get_nearby_task(player.global_position)
 	if nearby_task != null:
+		if completed_tasks.has(nearby_task.id):
+			return "[COMPLETED] %s" % nearby_task.name
 		return "[E] %s" % nearby_task.name
 
 	# 6. Saboteur Actions
@@ -201,7 +207,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		elif event.is_action_pressed("toggle_academic_lab"):
 			set_state(GameEnums.GameState.ACADEMIC_LAB)
 		elif event.is_action_pressed("pause_game"):
-			set_state(GameEnums.GameState.MAIN_MENU)
+			open_pause_menu()
 		elif player.character_state == GameEnums.CharacterState.VENTING:
 			if event.is_action_pressed("move_left") or event.is_action_pressed("move_right"):
 				var vents := active_campaign.vents if active_campaign else StationData.get_vents()
@@ -218,6 +224,9 @@ func _unhandled_input(event: InputEvent) -> void:
 						v_idx = (v_idx - 1 + vents.size()) % vents.size()
 					player.global_position = vents[v_idx].position
 					audio_synth.play_beep(340.0, 0.08)
+	elif current_state == GameEnums.GameState.PAUSE_MENU:
+		if event.is_action_pressed("pause_game"):
+			_on_resume_from_pause()
 
 func set_state(new_state: GameEnums.GameState) -> void:
 	current_state = new_state
@@ -229,6 +238,7 @@ func set_state(new_state: GameEnums.GameState) -> void:
 	task_dialog.visible = (new_state == GameEnums.GameState.TASK_MINIGAME)
 	evidence_screen.visible = (new_state == GameEnums.GameState.EVIDENCE_DOSSIER)
 	meeting_screen.visible = (new_state == GameEnums.GameState.MEETING)
+	pause_menu.visible = (new_state == GameEnums.GameState.PAUSE_MENU)
 	if new_state != GameEnums.GameState.GAMEPLAY and sabotage_dialog:
 		sabotage_dialog.visible = false
 
@@ -266,6 +276,44 @@ func _on_role_toggle_requested(as_saboteur: bool) -> void:
 
 func _on_task_dialog_closed() -> void:
 	set_state(GameEnums.GameState.GAMEPLAY)
+
+func _on_task_completed(task_id: int, task_name: String) -> void:
+	if not completed_tasks.has(task_id):
+		completed_tasks.append(task_id)
+		station_map.completed_tasks = completed_tasks
+		station_map.queue_redraw()
+		audio_synth.play_task_complete()
+		evidence_engine.record_event(
+			match_time,
+			GameEnums.EventType.COMPLETE_TASK,
+			player.player_id,
+			player.player_name,
+			-1, "",
+			player.current_room_id,
+			player.current_room_name,
+			"Sector maintenance task verified: %s completed by %s" % [task_name, player.player_name],
+			false
+		)
+		var save_data := SaveManager.load_game_data()
+		var stats: Dictionary = save_data.get("stats", {})
+		stats["tasks_completed_lifetime"] = stats.get("tasks_completed_lifetime", 0) + 1
+		save_data["stats"] = stats
+		SaveManager.save_game_data(save_data)
+		set_state(GameEnums.GameState.GAMEPLAY)
+		check_win_conditions()
+
+func open_pause_menu() -> void:
+	set_state(GameEnums.GameState.PAUSE_MENU)
+	pause_menu.open(audio_synth.is_muted)
+	audio_synth.play_beep(420.0, 0.08)
+
+func _on_resume_from_pause() -> void:
+	pause_menu.close()
+	set_state(GameEnums.GameState.GAMEPLAY)
+	audio_synth.play_beep(620.0, 0.08)
+
+func _on_pause_menu_mute_toggled(is_muted: bool) -> void:
+	audio_synth.is_muted = is_muted
 
 func _on_evidence_screen_closed() -> void:
 	set_state(GameEnums.GameState.GAMEPLAY)
@@ -438,6 +486,8 @@ func _on_player_interaction_requested() -> void:
 	# 5. Check Maintenance Task
 	var nearby_task := station_map.get_nearby_task(player.global_position)
 	if nearby_task != null:
+		if completed_tasks.has(nearby_task.id):
+			return
 		set_state(GameEnums.GameState.TASK_MINIGAME)
 		task_dialog.open(nearby_task)
 
@@ -668,23 +718,6 @@ func trigger_campaign_ending(p_victory: bool, reason: String) -> void:
 		stats["saboteur_victories"] = stats.get("saboteur_victories", 0) + 1
 	save_d["stats"] = stats
 	SaveManager.save_game_data(save_d)
-
-func _on_task_completed(task_id: int) -> void:
-	if not (task_id in completed_tasks):
-		completed_tasks.append(task_id)
-		station_map.completed_tasks = completed_tasks
-		evidence_engine.record_event(
-			match_time,
-			GameEnums.EventType.COMPLETE_TASK,
-			player.player_id,
-			player.player_name,
-			-1, "",
-			player.current_room_id,
-			player.current_room_name,
-			"Task completed in %s" % player.current_room_name,
-			false
-		)
-		audio_synth.play_task_complete()
 
 func _on_open_academic_lab() -> void:
 	set_state(GameEnums.GameState.ACADEMIC_LAB)

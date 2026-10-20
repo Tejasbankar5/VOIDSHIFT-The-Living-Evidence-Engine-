@@ -102,6 +102,14 @@ func _init() -> void:
 	else:
 		print("[FAIL] Test 10: Campaign Ending Logic Failed")
 
+	# Test 11: End-to-End Match Simulation & Consecutive Round Stability
+	total_tests += 1
+	if test_end_to_end_match_cycle():
+		passed_tests += 1
+		print("[PASS] Test 11: End-to-End Match Simulation & Multi-Round Stability")
+	else:
+		print("[FAIL] Test 11: End-to-End Match Simulation Failed")
+
 	print("\n=======================================================")
 	print("   VERIFICATION RESULT: %d / %d TESTS PASSED   " % [passed_tests, total_tests])
 	print("=======================================================\n")
@@ -337,3 +345,88 @@ func test_campaign_endings() -> bool:
 	if e1 == e2 or e2 == e3:
 		return false
 	return true
+
+func test_end_to_end_match_cycle() -> bool:
+	# Simulate 3 consecutive matches to verify stability across rounds
+	for round_num in range(3):
+		var seed_val := 1000 + round_num * 37
+		var assignments := RoleAllocator.allocate_roles(GameEnums.CampaignMode.HOLLOW_CROWN, seed_val)
+		if assignments.size() != 10:
+			return false
+
+		var player_assign: RoleAllocator.RoleAssignment = null
+		var saboteurs: Array[RoleAllocator.RoleAssignment] = []
+		var crew: Array[RoleAllocator.RoleAssignment] = []
+
+		for a in assignments:
+			if a.is_player:
+				player_assign = a
+			if a.is_saboteur:
+				saboteurs.append(a)
+			else:
+				crew.append(a)
+
+		if player_assign == null or saboteurs.size() != 2 or crew.size() != 8:
+			return false
+
+		# 1. Evidence engine initialization & recording
+		var engine := LivingEvidenceEngine.new()
+		engine.record_event(0.0, GameEnums.EventType.ENTER_ROOM, player_assign.character_id, player_assign.character_name, -1, "", "bridge", "Command Bridge", "Deployed")
+		if engine.events.size() != 1:
+			return false
+
+		# 2. Objective completion simulation
+		var task_mgr := TaskManager.new()
+		var completed_tasks: Array[int] = []
+		var task_spot := StationData.TaskSpotDef.new(0, GameEnums.TaskType.FIX_WIRING, "Fix Wiring", "engine", "Engine Room", Vector2(100, 100), "Desc")
+		task_mgr.start_task(task_spot)
+		for i in range(4):
+			task_mgr.handle_wiring_click(i, true)
+			task_mgr.handle_wiring_click(i, false)
+		if task_mgr.progress != 1.0:
+			return false
+		completed_tasks.append(task_spot.id)
+
+		# 3. Sabotage trigger, critical check, and repair
+		var sab_mgr := SabotageManager.new()
+		sab_mgr.trigger_sabotage(GameEnums.SabotageType.REACTOR)
+		if sab_mgr.active_sabotage != GameEnums.SabotageType.REACTOR:
+			return false
+		sab_mgr.repair_sabotage()
+		if sab_mgr.active_sabotage != GameEnums.SabotageType.NONE:
+			return false
+
+		# 4. Incident & Meeting Simulation
+		var victim := crew[0]
+		var dead_event := engine.record_event(
+			12.0, GameEnums.EventType.KILL_CREWMATE,
+			saboteurs[0].character_id, saboteurs[0].character_name,
+			victim.character_id, victim.character_name,
+			"gallery", "Gallery",
+			"Eliminated"
+		)
+		var living_chars: Array[Dictionary] = []
+		for a in assignments:
+			if a.character_id != victim.character_id:
+				living_chars.append({"id": a.character_id, "name": a.character_name, "is_impostor": a.is_saboteur})
+
+		var testimonies := engine.generate_crew_testimonies(living_chars, dead_event)
+		if testimonies.size() != 9:
+			return false
+
+		# Verify saboteur testimony generates contradiction when lying
+		var found_contradiction := false
+		for t in testimonies:
+			if not t.is_truthful:
+				found_contradiction = true
+				break
+		if not found_contradiction:
+			return false
+
+		# 5. Clean up for consecutive rounds
+		engine.clear()
+		if not engine.events.is_empty():
+			return false
+
+	return true
+

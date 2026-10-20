@@ -51,13 +51,12 @@ func _gui_input(event: InputEvent) -> void:
 	if not visible:
 		return
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
-		var btn_rect := Rect2(460, 620, 360, 48)
+		var vp := get_viewport_rect().size
+		if vp.x <= 0: vp.x = 1280.0
+		var btn_rect := Rect2((vp.x - 480) * 0.5, 620, 480, 52)
 		if btn_rect.has_point(event.position):
 			deploy()
 			return
-		var toggle_rect := Rect2(960, 620, 260, 48)
-		if toggle_rect.has_point(event.position) and player_assignment != null:
-			role_toggle_requested.emit(!player_assignment.is_saboteur)
 
 func deploy() -> void:
 	visible = false
@@ -139,20 +138,12 @@ func _draw() -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(685, 435), "SECRET MISSION DIRECTIVE:", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, role_border_col)
 	draw_wrapped_text(Vector2(685, 460), player_assignment.secret_objective, 490.0, 18.0, 13, Color(1, 1, 1))
 
-	# 5. Bottom Action Buttons: DEPLOY & SWITCH ROLE
-	var deploy_btn := Rect2((vp.x - 420) * 0.5, 620, 360, 50)
+	# 5. Bottom Action Button: DEPLOY
+	var deploy_btn := Rect2((vp.x - 480) * 0.5, 620, 480, 52)
 	var btn_glow: float = 0.8 + sin(anim_timer * 4.0) * 0.2
 	draw_rect(deploy_btn, role_border_col * 0.3)
 	draw_rect(deploy_btn, role_border_col * btn_glow, false, 2.0)
-	draw_string(ThemeDB.fallback_font, Vector2(deploy_btn.position.x, 652), "[SPACE / ENTER] DEPLOY TO SECTOR", HORIZONTAL_ALIGNMENT_CENTER, int(deploy_btn.size.x), 14, Color(1, 1, 1))
-
-	# Switch Role Button
-	var switch_btn := Rect2(vp.x - 310, 624, 250, 42)
-	var switch_col := Color(1.0, 0.35, 0.35) if not player_assignment.is_saboteur else Color(0.0, 0.85, 1.0)
-	draw_rect(switch_btn, switch_col * 0.2)
-	draw_rect(switch_btn, switch_col * 0.7, false, 1.4)
-	var switch_txt := "[T] BECOME IMPOSTOR" if not player_assignment.is_saboteur else "[T] BECOME CREW"
-	draw_string(ThemeDB.fallback_font, Vector2(switch_btn.position.x, 650), switch_txt, HORIZONTAL_ALIGNMENT_CENTER, int(switch_btn.size.x), 12, switch_col)
+	draw_string(ThemeDB.fallback_font, Vector2(deploy_btn.position.x, 652), "[SPACE / ENTER / CLICK] DEPLOY TO SECTOR", HORIZONTAL_ALIGNMENT_CENTER, int(deploy_btn.size.x), 14, Color(1, 1, 1))
 
 func draw_wrapped_text(pos: Vector2, text: String, max_width: float, line_height: float, font_size: int, col: Color) -> void:
 	var words := text.split(" ")
