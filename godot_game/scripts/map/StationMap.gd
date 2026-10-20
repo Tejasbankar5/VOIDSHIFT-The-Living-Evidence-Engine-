@@ -38,7 +38,6 @@ func set_campaign(mode: GameEnums.CampaignMode) -> void:
 	campaign_mode = mode
 	active_campaign = CampaignData.get_campaign(mode)
 	completed_tasks.clear()
-	build_collision_boundaries()
 	queue_redraw()
 
 func _process(delta: float) -> void:
@@ -62,23 +61,35 @@ func build_collision_boundaries() -> void:
 	wall_rects.clear()
 
 	var blocker_walls: Array[Rect2] = [
-		Rect2(0, 0, 1280, 40),      # Top screen bound
-		Rect2(0, 680, 1280, 40),    # Bottom screen bound
-		Rect2(0, 0, 40, 720),       # Left screen bound
-		Rect2(1240, 0, 40, 720)     # Right screen bound
+		Rect2(60, 30, 510, 280),      # Top-left void (above Medical/Gallery)
+		Rect2(1030, 30, 510, 280),    # Top-right void (above Lab/Archive)
+		Rect2(560, 30, 480, 20),      # Top hull wall
+		Rect2(560, 50, 20, 220),      # Left upper wall
+		Rect2(1020, 50, 20, 220),     # Right upper wall
+		Rect2(580, 270, 160, 60),     # Left of top corridor
+		Rect2(860, 270, 160, 60),     # Right of top corridor
+		Rect2(480, 320, 60, 100),     # Above left corridor
+		Rect2(480, 520, 60, 70),      # Below left corridor
+		Rect2(1060, 320, 60, 100),    # Above right corridor
+		Rect2(1060, 520, 60, 70),     # Below right corridor
+		Rect2(80, 580, 160, 60),      # Left of mid-left corridor
+		Rect2(340, 580, 140, 60),     # Right of mid-left corridor
+		Rect2(540, 590, 200, 60),     # Left of central-lower corridor
+		Rect2(860, 590, 200, 60),     # Right of central-lower corridor
+		Rect2(1100, 580, 420, 70),    # Void between Lab and Security
+		Rect2(780, 650, 40, 90),      # Upper dividing wall
+		Rect2(780, 820, 40, 80),      # Lower dividing wall
+		Rect2(520, 900, 100, 60),     # Left of lower-meeting corridor
+		Rect2(700, 900, 200, 60),     # Between lower corridors
+		Rect2(980, 900, 80, 60),      # Right of lower-meeting corridor
+		Rect2(60, 910, 470, 290),     # Bottom-left void
+		Rect2(1070, 900, 470, 300),   # Bottom-right void
+		Rect2(520, 1170, 560, 30),    # Meeting bottom wall
+		Rect2(520, 960, 20, 210),     # Meeting left wall
+		Rect2(1060, 960, 20, 210),    # Meeting right wall
+		Rect2(70, 310, 30, 610),      # Left outer wall
+		Rect2(1500, 310, 30, 610)     # Right outer wall
 	]
-
-	if campaign_mode == GameEnums.CampaignMode.HOLLOW_CROWN:
-		# Koi Pond water hazard (keeps navigation on bridge and stone paths)
-		blocker_walls.append(Rect2(160, 320, 150, 140))
-		# Inner shrine back ceremonial altar barrier
-		blocker_walls.append(Rect2(480, 45, 320, 40))
-	elif campaign_mode == GameEnums.CampaignMode.BLACKGLASS_STATION:
-		# Deck A observation railing (with corridor gap at x=340..460)
-		blocker_walls.append(Rect2(40, 205, 300, 16))
-		blocker_walls.append(Rect2(460, 205, 540, 16))
-		# Lab containment tank
-		blocker_walls.append(Rect2(700, 340, 90, 80))
 
 	for w in blocker_walls:
 		wall_rects.append(w)

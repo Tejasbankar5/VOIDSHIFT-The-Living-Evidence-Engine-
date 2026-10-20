@@ -13,6 +13,7 @@ signal report_requested()
 signal kill_requested()
 signal vent_requested()
 signal echo_vision_toggled()
+signal sabotage_menu_requested()
 
 @export var player_id: int = 0
 @export var player_name: String = "Commander Rex (You)"
@@ -31,9 +32,23 @@ func _ready() -> void:
 	name = "Player"
 
 func _physics_process(delta: float) -> void:
-	if character_state == GameEnums.CharacterState.DEAD or character_state == GameEnums.CharacterState.IN_MEETING:
+	if character_state == GameEnums.CharacterState.IN_MEETING:
 		velocity = Vector2.ZERO
 		move_and_slide()
+		queue_redraw()
+		return
+
+	if character_state == GameEnums.CharacterState.DEAD:
+		# Ghost Observer: Floats freely through the map at accelerated speed
+		var ghost_input := Input.get_vector("move_left", "move_right", "move_up", "move_down")
+		if ghost_input != Vector2.ZERO:
+			velocity = ghost_input.normalized() * (speed * 1.35)
+			walk_time += delta
+			is_facing_left = velocity.x < -0.1
+		else:
+			velocity = Vector2.ZERO
+			walk_time = 0.0
+		global_position += velocity * delta
 		queue_redraw()
 		return
 
@@ -63,7 +78,10 @@ func _physics_process(delta: float) -> void:
 	queue_redraw()
 
 func _unhandled_input(event: InputEvent) -> void:
-	if character_state == GameEnums.CharacterState.DEAD or character_state == GameEnums.CharacterState.IN_MEETING:
+	if character_state == GameEnums.CharacterState.IN_MEETING:
+		return
+
+	if character_state == GameEnums.CharacterState.DEAD:
 		return
 
 	if event.is_action_pressed("interact"):
@@ -74,6 +92,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		kill_requested.emit()
 	elif event.is_action_pressed("action_vent") and is_saboteur():
 		vent_requested.emit()
+	elif (event.is_action_pressed("action_sabotage") or (event is InputEventKey and event.pressed and (event.keycode == KEY_C or event.keycode == KEY_Z))) and is_saboteur():
+		sabotage_menu_requested.emit()
 	elif event is InputEventKey and event.pressed and (event.keycode == KEY_Q or event.keycode == KEY_F):
 		echo_vision_toggled.emit()
 
@@ -81,7 +101,7 @@ func _draw() -> void:
 	if character_state == GameEnums.CharacterState.VENTING:
 		return
 	var is_dead := (character_state == GameEnums.CharacterState.DEAD)
-	CrewmateRenderer.draw_character(self, Vector2.ZERO, player_name, role, is_dead, walk_time, is_facing_left, true)
+	CrewmateRenderer.draw_astronaut(self, Vector2.ZERO, role, is_dead, walk_time, is_facing_left, true)
 
 func is_saboteur() -> bool:
 	return role == GameEnums.Role.INFILTRATOR or role == GameEnums.Role.DISRUPTOR or role == GameEnums.Role.SABOTEUR_IMPOSTOR

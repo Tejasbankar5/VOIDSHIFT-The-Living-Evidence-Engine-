@@ -14,11 +14,7 @@ const SaveManager = preload("res://scripts/core/SaveManager.gd")
 const CampaignData = preload("res://scripts/core/CampaignData.gd")
 const RoleAllocator = preload("res://scripts/core/RoleAllocator.gd")
 const GameEnums = preload("res://scripts/core/GameEnums.gd")
-const StationData = preload("res://scripts/core/StationData.gd")
 const CrewmateAI = preload("res://scripts/ai/CrewmateAI.gd")
-const BriefingScreen = preload("res://scripts/ui/BriefingScreen.gd")
-const DebriefScreen = preload("res://scripts/ui/DebriefScreen.gd")
-const InterrogationDialog = preload("res://scripts/ui/InterrogationDialog.gd")
 
 @onready var station_map: StationMap = $StationMap
 @onready var player: PlayerController = $Player
@@ -29,7 +25,7 @@ const InterrogationDialog = preload("res://scripts/ui/InterrogationDialog.gd")
 @onready var meeting_screen: MeetingScreen = $CanvasLayer/MeetingScreen
 @onready var evidence_screen: EvidenceScreen = $CanvasLayer/EvidenceScreen
 @onready var task_dialog: TaskDialog = $CanvasLayer/TaskDialog
-@onready var interrogation_dialog: InterrogationDialog = $CanvasLayer/InterrogationDialog
+@onready var sabotage_dialog: SabotageDialog = $CanvasLayer/SabotageDialog
 @onready var academic_lab: AcademicLab = $CanvasLayer/AcademicLab
 @onready var audio_synth: AudioSynthesizer = $AudioSynthesizer
 
@@ -67,11 +63,17 @@ func _ready() -> void:
 	main_menu.start_game_requested.connect(_on_start_game_requested)
 	main_menu.academic_lab_requested.connect(_on_open_academic_lab)
 	briefing_screen.deploy_requested.connect(_on_deploy_requested)
+	briefing_screen.role_toggle_requested.connect(_on_role_toggle_requested)
 	debrief_screen.restart_requested.connect(_on_restart_match)
 	debrief_screen.main_menu_requested.connect(_on_return_to_main_menu)
 	meeting_screen.meeting_concluded.connect(_on_meeting_concluded)
 	academic_lab.exit_requested.connect(_on_exit_academic_lab)
-	interrogation_dialog.dialogue_closed.connect(_on_interrogation_closed)
+
+	# Connect Dialog close signals
+	task_dialog.closed.connect(_on_task_dialog_closed)
+	evidence_screen.close_requested.connect(_on_evidence_screen_closed)
+	sabotage_dialog.sabotage_selected.connect(_on_sabotage_selected_from_dialog)
+	sabotage_dialog.closed.connect(_on_sabotage_dialog_closed)
 
 	# Connect Player Signals
 	player.task_requested.connect(_on_player_interaction_requested)
@@ -79,6 +81,7 @@ func _ready() -> void:
 	player.kill_requested.connect(_on_player_kill_requested)
 	player.vent_requested.connect(_on_player_vent_requested)
 	player.echo_vision_toggled.connect(_on_player_echo_vision_toggled)
+	player.sabotage_menu_requested.connect(_on_player_sabotage_requested)
 
 	# Setup Dialogs
 	task_dialog.setup(task_manager)
@@ -147,43 +150,47 @@ func check_cctv_sightings() -> void:
 
 func get_contextual_prompt() -> String:
 	if player.character_state == GameEnums.CharacterState.DEAD:
-		return "[DEAD] You are wandering as a ghost observer."
+		return "[GHOST OBSERVER] You are eliminated. Freely explore and observe the remaining crew."
 
-	# 1. Nearby Suspect to question
-	var nearby_suspect := get_nearby_suspect(player.global_position)
-	if nearby_suspect != null:
-		return "[E] Question %s (%s)" % [nearby_suspect.name, nearby_suspect.title]
-
-	# 2. Nearby Undiscovered Echo Clue
+	# 1. Nearby Undiscovered Echo Clue
 	var nearby_clue := station_map.get_nearby_echo_clue(player.global_position)
 	if nearby_clue != null:
 		return "[E] Analyze Echo Trace: %s" % nearby_clue.name
 
-	# 2. Emergency Button
+	# 2. Check active sabotage repair
+	if sabotage_manager.active_sabotage != GameEnums.SabotageType.NONE:
+		var repair_pos := get_sabotage_repair_position(sabotage_manager.active_sabotage)
+		if player.global_position.distance_to(repair_pos) <= 90.0:
+			return "[E] REPAIR %s EMERGENCY" % get_sabotage_title(sabotage_manager.active_sabotage).to_upper()
+
+	# 3. Fallen Crewmate (Can report with E or R)
+	var nearby_body := find_nearby_dead_body(70.0)
+	if nearby_body != null:
+		var b_name: String = nearby_body.bot_name if nearby_body is CrewmateAI else "Crewmate"
+		return "[E / R] Report Fallen %s" % b_name
+
+	# 4. Emergency Button
 	if station_map.is_near_emergency_button(player.global_position):
 		return "[E] Convene Expedition Meeting"
 
-	# 3. Sector Maintenance Task
+	# 5. Sector Maintenance Task
 	var nearby_task := station_map.get_nearby_task(player.global_position)
 	if nearby_task != null:
 		return "[E] %s" % nearby_task.name
 
-	# 4. Fallen Crewmate
-	var nearby_body := find_nearby_dead_body(60.0)
-	if nearby_body != null:
-		var b_name: String = nearby_body.bot_name if nearby_body is CrewmateAI else "Crewmate"
-		return "[R] Report Fallen %s" % b_name
-
-	# 5. Saboteur Actions
+	# 6. Saboteur Actions
 	if player.is_saboteur():
+		if player.character_state == GameEnums.CharacterState.VENTING:
+			return "[V] Exit Sub-Conduit into %s  •  [A / D] Traverse Vents" % player.current_room_name
 		var nearby_vent := station_map.get_nearby_vent(player.global_position)
 		if nearby_vent != null:
-			return "[V] Enter Sub-Conduit"
+			return "[V] Enter Sub-Conduit  •  [C] Sabotage System"
 		if player.can_kill():
 			var victim := find_nearby_kill_target(60.0)
 			if victim != null:
 				var v_name: String = victim.bot_name if victim is CrewmateAI else "Crewmate"
-				return "[SPACE] Eliminate %s" % v_name
+				return "[SPACE] Eliminate %s  •  [C] Sabotage System" % v_name
+		return "[C] Open Tactical Sabotage Matrix"
 
 	return ""
 
@@ -195,6 +202,22 @@ func _unhandled_input(event: InputEvent) -> void:
 			set_state(GameEnums.GameState.ACADEMIC_LAB)
 		elif event.is_action_pressed("pause_game"):
 			set_state(GameEnums.GameState.MAIN_MENU)
+		elif player.character_state == GameEnums.CharacterState.VENTING:
+			if event.is_action_pressed("move_left") or event.is_action_pressed("move_right"):
+				var vents := active_campaign.vents if active_campaign else StationData.get_vents()
+				if not vents.is_empty():
+					var cur_v := station_map.get_nearby_vent(player.global_position)
+					var v_idx: int = 0
+					for idx in range(vents.size()):
+						if vents[idx].position.distance_to(player.global_position) <= 80.0:
+							v_idx = idx
+							break
+					if event.is_action_pressed("move_right"):
+						v_idx = (v_idx + 1) % vents.size()
+					else:
+						v_idx = (v_idx - 1 + vents.size()) % vents.size()
+					player.global_position = vents[v_idx].position
+					audio_synth.play_beep(340.0, 0.08)
 
 func set_state(new_state: GameEnums.GameState) -> void:
 	current_state = new_state
@@ -203,23 +226,23 @@ func set_state(new_state: GameEnums.GameState) -> void:
 	debrief_screen.visible = (new_state == GameEnums.GameState.DEBRIEF_ENDING)
 	hud.visible = (new_state == GameEnums.GameState.GAMEPLAY or new_state == GameEnums.GameState.TASK_MINIGAME)
 	academic_lab.visible = (new_state == GameEnums.GameState.ACADEMIC_LAB)
-	task_dialog.visible = (new_state == GameEnums.GameState.TASK_MINIGAME and not interrogation_dialog.visible)
-	if new_state != GameEnums.GameState.TASK_MINIGAME:
-		interrogation_dialog.visible = false
+	task_dialog.visible = (new_state == GameEnums.GameState.TASK_MINIGAME)
 	evidence_screen.visible = (new_state == GameEnums.GameState.EVIDENCE_DOSSIER)
 	meeting_screen.visible = (new_state == GameEnums.GameState.MEETING)
+	if new_state != GameEnums.GameState.GAMEPLAY and sabotage_dialog:
+		sabotage_dialog.visible = false
 
 # =========================================================================
-# CAMPAIGN & MATCH INITIALIZATION (Genuinely Randomized Roles)
+# CAMPAIGN & MATCH INITIALIZATION (Genuinely Randomized Roles / Role Preference)
 # =========================================================================
-func _on_campaign_selected(mode: GameEnums.CampaignMode) -> void:
+func _on_campaign_selected(mode: GameEnums.CampaignMode, role_pref: int = 0) -> void:
 	active_campaign_mode = mode
 	active_campaign = CampaignData.get_campaign(mode)
 	station_map.set_campaign(mode)
 	evidence_screen.set_campaign(active_campaign)
 
-	# Autonomous Role Allocation: Full 10-person roster shuffled randomly
-	all_assignments = RoleAllocator.allocate_roles(mode)
+	# Role Allocation with optional preference (0: Random, 1: Guaranteed Imposter, 2: Guaranteed Crew)
+	all_assignments = RoleAllocator.allocate_roles(mode, -1, role_pref)
 	player_assignment = null
 	for assign in all_assignments:
 		if assign.is_player:
@@ -230,6 +253,55 @@ func _on_campaign_selected(mode: GameEnums.CampaignMode) -> void:
 	briefing_screen.setup_briefing(active_campaign, player_assignment)
 	set_state(GameEnums.GameState.BRIEFING_ROLE_REVEAL)
 	audio_synth.play_beep(380.0, 0.12)
+
+func _on_role_toggle_requested(as_saboteur: bool) -> void:
+	all_assignments = RoleAllocator.allocate_roles(active_campaign_mode, -1, 1 if as_saboteur else 2)
+	player_assignment = null
+	for assign in all_assignments:
+		if assign.is_player:
+			player_assignment = assign
+			break
+	briefing_screen.setup_briefing(active_campaign, player_assignment)
+	audio_synth.play_beep(650.0, 0.12)
+
+func _on_task_dialog_closed() -> void:
+	set_state(GameEnums.GameState.GAMEPLAY)
+
+func _on_evidence_screen_closed() -> void:
+	set_state(GameEnums.GameState.GAMEPLAY)
+
+func _on_sabotage_dialog_closed() -> void:
+	set_state(GameEnums.GameState.GAMEPLAY)
+
+func _on_player_sabotage_requested() -> void:
+	if current_state != GameEnums.GameState.GAMEPLAY or not player.is_saboteur():
+		return
+	sabotage_dialog.open(sabotage_manager.active_sabotage, sabotage_manager.timer)
+	audio_synth.play_beep(600.0, 0.1)
+
+func _on_sabotage_selected_from_dialog(type: GameEnums.SabotageType) -> void:
+	trigger_sabotage_event(type, player.player_name)
+
+func _on_ai_body_reported(reporter_name: String, victim_name: String) -> void:
+	start_emergency_meeting(reporter_name, victim_name)
+
+func _on_ai_sabotage_requested(sab_type: GameEnums.SabotageType) -> void:
+	if sabotage_manager.active_sabotage == GameEnums.SabotageType.NONE:
+		trigger_sabotage_event(sab_type, "Unknown Saboteur")
+
+func trigger_sabotage_event(type: GameEnums.SabotageType, initiator: String) -> void:
+	sabotage_manager.trigger_sabotage(type)
+	audio_synth.play_emergency_alarm()
+	evidence_engine.record_event(
+		match_time,
+		GameEnums.EventType.TRIGGER_SABOTAGE,
+		player.player_id if initiator == player.player_name else -1,
+		initiator,
+		-1, "",
+		"station", "Station Systems",
+		"Critical Sabotage Event: %s" % get_sabotage_title(type),
+		true
+	)
 
 func _on_start_game_requested(play_as_saboteur: bool) -> void:
 	# Fallback legacy trigger maps to Hollow Crown
@@ -286,6 +358,8 @@ func deploy_match() -> void:
 		bot.bot_name = assign.character_name
 		bot.role = assign.role
 		bot.global_position = assign.spawn_position
+		bot.body_reported.connect(_on_ai_body_reported)
+		bot.sabotage_requested.connect(_on_ai_sabotage_requested)
 		add_child(bot)
 		ai_crew.append(bot)
 		all_characters.append(bot)
@@ -307,23 +381,37 @@ func deploy_match() -> void:
 # INTERACTION & ECHO VISION HANDLING
 # =========================================================================
 func _on_player_interaction_requested() -> void:
-	# 1. Check nearby Suspect to question
-	var nearby_suspect := get_nearby_suspect(player.global_position)
-	if nearby_suspect != null:
-		set_state(GameEnums.GameState.TASK_MINIGAME)
-		task_dialog.visible = false
-		interrogation_dialog.open_interrogation(nearby_suspect, active_campaign, evidence_engine)
-		# Complete relevant checklist tasks
-		if active_campaign_mode == GameEnums.CampaignMode.HOLLOW_CROWN:
-			if nearby_suspect.id == "sora" or nearby_suspect.id == "kenji" or nearby_suspect.id == "aiko":
-				check_off_task_by_id("question_attendants")
-		elif active_campaign_mode == GameEnums.CampaignMode.BLACKGLASS_STATION:
-			if nearby_suspect.id == "elara" or nearby_suspect.id == "kael":
-				check_off_task_by_id("talk_crew")
-		audio_synth.play_beep(660.0, 0.12)
+	if player.character_state == GameEnums.CharacterState.DEAD:
 		return
 
-	# 2. Check nearby undiscovered Echo Clue
+	# 1. Check if near a fallen crewmate (E to report)
+	var nearby_dead := find_nearby_dead_body(70.0)
+	if nearby_dead != null:
+		var victim_name: String = nearby_dead.bot_name if nearby_dead is CrewmateAI else "Crewmate"
+		start_emergency_meeting(player.player_name, victim_name)
+		return
+
+	# 2. Check active sabotage repair console
+	if sabotage_manager.active_sabotage != GameEnums.SabotageType.NONE:
+		var rep_pos := get_sabotage_repair_position(sabotage_manager.active_sabotage)
+		if player.global_position.distance_to(rep_pos) <= 90.0:
+			var sab_title := get_sabotage_title(sabotage_manager.active_sabotage)
+			sabotage_manager.repair_sabotage()
+			audio_synth.play_task_complete()
+			evidence_engine.record_event(
+				match_time,
+				GameEnums.EventType.REPAIR_SABOTAGE,
+				player.player_id,
+				player.player_name,
+				-1, "",
+				player.current_room_id,
+				player.current_room_name,
+				"Emergency sabotage resolved: %s repaired by %s" % [sab_title, player.player_name],
+				false
+			)
+			return
+
+	# 3. Check if near an undiscovered Echo Clue
 	var nearby_clue := station_map.get_nearby_echo_clue(player.global_position)
 	if nearby_clue != null:
 		nearby_clue.is_collected = true
@@ -338,56 +426,20 @@ func _on_player_interaction_requested() -> void:
 			"Forensic Clue Discovered: %s (%s)" % [nearby_clue.name, nearby_clue.forensic_detail],
 			false
 		)
-		# Check off relevant checklist tasks
-		if nearby_clue.id == "clue_garden_path":
-			check_off_task_by_id("garden_path")
-		elif nearby_clue.id == "clue_inner_shrine":
-			check_off_task_by_id("ceremonial_hall")
-		elif nearby_clue.id == "clue_tea_set":
-			check_off_task_by_id("question_attendants")
-		elif nearby_clue.id == "clue_ancient_records":
-			check_off_task_by_id("analyze_records")
-		elif nearby_clue.id == "clue_containment_chamber":
-			check_off_task_by_id("examine_chamber")
-		elif nearby_clue.id == "clue_scrubbed_logs":
-			check_off_task_by_id("review_records")
-		elif nearby_clue.id == "clue_manual_surge":
-			check_off_task_by_id("inspect_reactor")
-
 		audio_synth.play_beep(880.0, 0.20)
 		station_map.queue_redraw()
 		return
 
-	# 3. Check Emergency Button
+	# 4. Check Emergency Button
 	if station_map.is_near_emergency_button(player.global_position):
 		start_emergency_meeting(player.player_name, "")
 		return
 
-	# 4. Check Maintenance Task
+	# 5. Check Maintenance Task
 	var nearby_task := station_map.get_nearby_task(player.global_position)
 	if nearby_task != null:
 		set_state(GameEnums.GameState.TASK_MINIGAME)
-		interrogation_dialog.visible = false
 		task_dialog.open(nearby_task)
-
-func get_nearby_suspect(pos: Vector2, max_dist: float = 65.0) -> CampaignData.SuspectDef:
-	if not active_campaign:
-		return null
-	for s in active_campaign.suspects:
-		if pos.distance_to(s.position) <= max_dist:
-			return s
-	return null
-
-func check_off_task_by_id(task_id_str: String) -> void:
-	if not active_campaign:
-		return
-	for task in active_campaign.checklist_tasks:
-		if task.get("id", "") == task_id_str:
-			task["done"] = true
-			break
-
-func _on_interrogation_closed() -> void:
-	set_state(GameEnums.GameState.GAMEPLAY)
 
 func _on_player_echo_vision_toggled() -> void:
 	echo_vision_active = !echo_vision_active
@@ -396,7 +448,7 @@ func _on_player_echo_vision_toggled() -> void:
 	audio_synth.play_beep(740.0 if echo_vision_active else 320.0, 0.08)
 
 func _on_player_report_requested() -> void:
-	var dead_body := find_nearby_dead_body(60.0)
+	var dead_body := find_nearby_dead_body(70.0)
 	if dead_body != null:
 		var victim_name: String = dead_body.bot_name if dead_body is CrewmateAI else "Crewmate"
 		start_emergency_meeting(player.player_name, victim_name)
@@ -421,17 +473,40 @@ func _on_player_kill_requested() -> void:
 		)
 
 func _on_player_vent_requested() -> void:
-	var vent := station_map.get_nearby_vent(player.global_position)
-	if vent != null:
-		if player.character_state == GameEnums.CharacterState.VENTING:
-			player.character_state = GameEnums.CharacterState.ALIVE
-		else:
+	if player.character_state == GameEnums.CharacterState.VENTING:
+		player.character_state = GameEnums.CharacterState.ALIVE
+		evidence_engine.record_event(
+			match_time,
+			GameEnums.EventType.EXIT_VENT,
+			player.player_id,
+			player.player_name,
+			-1, "",
+			player.current_room_id,
+			player.current_room_name,
+			"%s emerged from ventilation conduit in %s" % [player.player_name, player.current_room_name],
+			true
+		)
+		audio_synth.play_beep(440.0, 0.1)
+	else:
+		var vent := station_map.get_nearby_vent(player.global_position)
+		if vent != null:
 			player.character_state = GameEnums.CharacterState.VENTING
 			var vents := active_campaign.vents if active_campaign else StationData.get_vents()
 			if vent.connected_vent_id >= 0 and vent.connected_vent_id < vents.size():
 				var target_vent := vents[vent.connected_vent_id]
 				player.global_position = target_vent.position
-		audio_synth.play_beep(300.0, 0.08)
+			evidence_engine.record_event(
+				match_time,
+				GameEnums.EventType.ENTER_VENT,
+				player.player_id,
+				player.player_name,
+				-1, "",
+				player.current_room_id,
+				player.current_room_name,
+				"%s slipped into ventilation conduit in %s" % [player.player_name, player.current_room_name],
+				true
+			)
+			audio_synth.play_beep(300.0, 0.12)
 
 # =========================================================================
 # EMERGENCY MEETINGS & CONTRADICTIONS
@@ -470,11 +545,12 @@ func start_emergency_meeting(reporter: String, victim_name: String) -> void:
 
 	var testimonies := evidence_engine.generate_crew_testimonies(living, dead_event)
 	set_state(GameEnums.GameState.MEETING)
-	meeting_screen.setup_meeting(reporter, victim_name, living, testimonies)
+	meeting_screen.setup_meeting(reporter, victim_name, living, testimonies, player.player_id)
 
 func _on_meeting_concluded(ejected_id: int, is_impostor: bool) -> void:
 	if ejected_id == player.player_id:
 		player.character_state = GameEnums.CharacterState.DEAD
+		spawn_player_corpse(player.global_position, player.role, player.player_name)
 	else:
 		for bot in ai_crew:
 			if bot.bot_id == ejected_id:
@@ -493,6 +569,38 @@ func _on_meeting_concluded(ejected_id: int, is_impostor: bool) -> void:
 
 	if remaining_saboteurs == 0:
 		trigger_campaign_ending(true, "All hidden saboteurs were unmasked and neutralized.")
+
+func spawn_player_corpse(pos: Vector2, p_role: GameEnums.Role, p_name: String) -> void:
+	var ai_scene: PackedScene = load("res://scenes/ai/CrewmateAI.tscn")
+	var corpse := ai_scene.instantiate() as CrewmateAI
+	corpse.bot_id = player.player_id
+	corpse.bot_name = p_name
+	corpse.role = p_role
+	corpse.character_state = GameEnums.CharacterState.DEAD
+	corpse.global_position = pos
+	add_child(corpse)
+	ai_crew.append(corpse)
+
+func get_sabotage_repair_position(type: GameEnums.SabotageType) -> Vector2:
+	match type:
+		GameEnums.SabotageType.REACTOR:
+			return Vector2(700, 200) # Reactor Core Console
+		GameEnums.SabotageType.LIGHTS:
+			return Vector2(500, 680) # Electrical Junction
+		GameEnums.SabotageType.COMMUNICATIONS:
+			return Vector2(1040, 160) # Communications Deck
+		GameEnums.SabotageType.OXYGEN:
+			return Vector2(800, 750) # Storage / Life Support
+		_:
+			return Vector2(700, 960)
+
+func get_sabotage_title(type: GameEnums.SabotageType) -> String:
+	match type:
+		GameEnums.SabotageType.REACTOR: return "Reactor Core Overload"
+		GameEnums.SabotageType.LIGHTS: return "Electrical Grid Blackout"
+		GameEnums.SabotageType.COMMUNICATIONS: return "Communications Jammer"
+		GameEnums.SabotageType.OXYGEN: return "Atmospheric O2 Depletion"
+		_: return "System Fault"
 
 # =========================================================================
 # WIN / LOSS / DEBRIEFING CONDITIONS

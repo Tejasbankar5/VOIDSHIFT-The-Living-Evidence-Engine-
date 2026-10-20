@@ -38,41 +38,26 @@ class RoleAssignment:
 		special_ability = p_ability
 		spawn_position = p_pos
 
-static func allocate_roles(campaign_mode: GameEnums.CampaignMode, seed_val: int = -1) -> Array[RoleAssignment]:
+static func allocate_roles(campaign_mode: GameEnums.CampaignMode, seed_val: int = -1, force_role_type: int = 0) -> Array[RoleAssignment]:
 	var rng := RandomNumberGenerator.new()
 	if seed_val >= 0:
 		rng.seed = seed_val
 	else:
 		rng.randomize()
 
-	# 1. Ten Expedition Members Roster (tailored to selected campaign)
-	var roster: Array[Dictionary] = []
-	if campaign_mode == GameEnums.CampaignMode.HOLLOW_CROWN:
-		roster = [
-			{"name": "Rex", "title": "Guest Investigator", "pos": Vector2(560, 480)},
-			{"name": "Aiko", "title": "Shrine Priestess", "pos": Vector2(930, 430)},
-			{"name": "Kenji", "title": "Elder Archivist", "pos": Vector2(490, 330)},
-			{"name": "Sora", "title": "Tea Attendant", "pos": Vector2(280, 470)},
-			{"name": "Haru", "title": "Estate Guardian", "pos": Vector2(740, 500)},
-			{"name": "Ren", "title": "Senior Protector", "pos": Vector2(380, 590)},
-			{"name": "Chiyo", "title": "Estate Herbalist", "pos": Vector2(620, 450)},
-			{"name": "Kaede", "title": "Ritual Specialist", "pos": Vector2(880, 410)},
-			{"name": "Daiki", "title": "Groundskeeper", "pos": Vector2(520, 530)},
-			{"name": "Yuki", "title": "Estate Scribe", "pos": Vector2(410, 340)}
-		]
-	else:
-		roster = [
-			{"name": "Rex", "title": "Chief Investigator", "pos": Vector2(450, 435)},
-			{"name": "Elara", "title": "Chief Xenologist", "pos": Vector2(620, 435)},
-			{"name": "Kael", "title": "Operations Officer", "pos": Vector2(560, 210)},
-			{"name": "Lyra", "title": "Systems Engineer", "pos": Vector2(320, 640)},
-			{"name": "Vance", "title": "Shuttle Pilot", "pos": Vector2(250, 435)},
-			{"name": "Thorne", "title": "Science Officer", "pos": Vector2(810, 435)},
-			{"name": "Silas", "title": "Data Analyst", "pos": Vector2(480, 210)},
-			{"name": "Vesper", "title": "Flight Medic", "pos": Vector2(360, 435)},
-			{"name": "Orion", "title": "Communications Tech", "pos": Vector2(700, 210)},
-			{"name": "Novak", "title": "Maintenance Tech", "pos": Vector2(880, 640)}
-		]
+	# 1. Ten Expedition Members Roster
+	var roster := [
+		{"name": "Rex", "title": "Expedition Commander", "pos": Vector2(700, 960)},
+		{"name": "Nova", "title": "Lead Scientist", "pos": Vector2(1040, 420)},
+		{"name": "Astra", "title": "Chief Medical Officer", "pos": Vector2(240, 420)},
+		{"name": "Vance", "title": "Systems Engineer", "pos": Vector2(500, 680)},
+		{"name": "Kael", "title": "Security Specialist", "pos": Vector2(1060, 700)},
+		{"name": "Lyra", "title": "Communications Officer", "pos": Vector2(1040, 160)},
+		{"name": "Orion", "title": "Lead Surveyor", "pos": Vector2(260, 200)},
+		{"name": "Thorne", "title": "Excavation Specialist", "pos": Vector2(800, 750)},
+		{"name": "Vesper", "title": "Tactical Operative", "pos": Vector2(1250, 750)},
+		{"name": "Silas", "title": "Sub-Ice Technician", "pos": Vector2(350, 750)}
+	]
 
 	# 2. Pool of 10 Roles: Exactly 2 Saboteurs (Infiltrator, Disruptor) and 8 Crew Specialists
 	var role_pool: Array[GameEnums.Role] = [
@@ -95,9 +80,28 @@ static func allocate_roles(campaign_mode: GameEnums.CampaignMode, seed_val: int 
 		role_pool[i] = role_pool[j]
 		role_pool[j] = tmp
 
-	# 3. Randomly determine which roster slot is assigned to the local human player (0 to 9)
-	# Guarantees the player can be ANY of the 10 roles without bias or manual choice
-	var player_slot: int = rng.randi_range(0, roster.size() - 1)
+	# 3. Determine which roster slot is assigned to the local human player (0 to 9)
+	# Supports random allocation by default, or guaranteed imposter / crew selection
+	var player_slot: int = -1
+	if force_role_type == 1:
+		# Guarantee Saboteur: find slots with saboteur roles
+		var sab_slots: Array[int] = []
+		for idx in range(role_pool.size()):
+			if role_pool[idx] == GameEnums.Role.INFILTRATOR or role_pool[idx] == GameEnums.Role.DISRUPTOR:
+				sab_slots.append(idx)
+		if not sab_slots.is_empty():
+			player_slot = sab_slots[rng.randi_range(0, sab_slots.size() - 1)]
+	elif force_role_type == 2:
+		# Guarantee Crew: find slots with crew specialist roles
+		var crew_slots: Array[int] = []
+		for idx in range(role_pool.size()):
+			if role_pool[idx] != GameEnums.Role.INFILTRATOR and role_pool[idx] != GameEnums.Role.DISRUPTOR:
+				crew_slots.append(idx)
+		if not crew_slots.is_empty():
+			player_slot = crew_slots[rng.randi_range(0, crew_slots.size() - 1)]
+
+	if player_slot == -1:
+		player_slot = rng.randi_range(0, roster.size() - 1)
 
 	var assignments: Array[RoleAssignment] = []
 
@@ -157,44 +161,28 @@ static func get_role_description(role: GameEnums.Role) -> String:
 static func get_secret_objective(role: GameEnums.Role, campaign: GameEnums.CampaignMode) -> String:
 	match role:
 		GameEnums.Role.INVESTIGATOR:
-			if campaign == GameEnums.CampaignMode.HOLLOW_CROWN:
-				return "Discover who bypassed the shrine seal, find the hidden passage, and recover the Hollow Crown."
-			else:
-				return "Reconstruct the blackout timeline, analyze the containment residue, and identify the thief."
+			return "Collect at least 2 Echo Clues and expose the saboteurs during an Emergency Meeting."
 		GameEnums.Role.ENGINEER:
-			if campaign == GameEnums.CampaignMode.HOLLOW_CROWN:
-				return "Inspect the estate's mechanical lanterns and find the hidden passage wall latch."
-			else:
-				return "Trace the manual circuit breaker surge in Engineering Bay and stabilize reactor output."
+			return "Complete all power and maintenance tasks to prevent critical system failure."
 		GameEnums.Role.ARCHIVIST:
-			if campaign == GameEnums.CampaignMode.HOLLOW_CROWN:
-				return "Analyze ancient clan scrolls in the Archive and uncover the historical motive for the theft."
-			else:
-				return "Recover the scrubbed CCTV security telemetry logs from the auxiliary terminal."
+			return "Recover corrupted research logs and compare witness statements against timestamps."
 		GameEnums.Role.FIELD_MEDIC:
-			if campaign == GameEnums.CampaignMode.HOLLOW_CROWN:
-				return "Inspect the crushed petals and footwear indentations across the stone courtyard."
-			else:
-				return "Analyze biological solvent traces left on the ruptured cryogenic containment cylinder."
+			return "Verify the cellular integrity of the crew and inspect all casualty sites."
 		GameEnums.Role.SECURITY_SPECIALIST:
-			if campaign == GameEnums.CampaignMode.HOLLOW_CROWN:
-				return "Verify the integrity of the Moon Gate perimeter and cross-reference attendee alibis."
-			else:
-				return "Cross-reference keycard access timestamps against witness statements during the blackout."
+			return "Cross-reference CCTV sightings with claimed alibis to catch contradictions."
 		GameEnums.Role.CREW_SPECIALIST:
-			return "Complete your assigned station investigation tasks and maintain security protocols."
+			return "Fulfill all assigned sector maintenance tasks before sabotage triggers."
 		GameEnums.Role.INFILTRATOR:
 			if campaign == GameEnums.CampaignMode.HOLLOW_CROWN:
-				return "Ensure the Hollow Crown escapes through the Moon Gate. Conceal the hidden passage and frame an attendant."
+				return "Prevent the Hollow Crown from being recovered. Eliminate 2 crewmates and frame an innocent."
+			elif campaign == GameEnums.CampaignMode.BLACKGLASS_STATION:
+				return "Conceal Dr. Thorne's research. Purge evidence logs and eliminate key witnesses."
 			else:
-				return "Prepare the observation lock for extraction. Purge terminal logs and avoid suspicion."
+				return "Force the polar facility into cryogenic freeze before the signal can be decoded."
 		GameEnums.Role.DISRUPTOR:
-			if campaign == GameEnums.CampaignMode.HOLLOW_CROWN:
-				return "Extinguish estate lanterns, create false petal tracks, and keep the guardians searching outside."
-			else:
-				return "Trigger auxiliary power overloads, tamper with door locks, and delay the forensic team."
+			return "Trigger critical sabotage, manipulate mechanism logs, and prevent the crew from completing tasks."
 		_:
-			return "Investigate the incident, survive the night, and protect the mission truth."
+			return "Complete all assigned tasks and survive the expedition."
 
 static func get_special_ability(role: GameEnums.Role) -> String:
 	match role:

@@ -2,6 +2,8 @@ class_name MeetingScreen
 extends Control
 
 const CrewmateRenderer = preload("res://scripts/render/CrewmateRenderer.gd")
+const LivingEvidenceEngine = preload("res://scripts/evidence/LivingEvidenceEngine.gd")
+const GameEnums = preload("res://scripts/core/GameEnums.gd")
 
 ## Emergency Meeting & Evidence Interrogation Interface for VOIDSHIFT.
 ## Displays crew statements, live contradiction analysis, and voting mechanisms.
@@ -19,6 +21,7 @@ var current_phase: MeetingPhase = MeetingPhase.DISCUSSION
 var phase_timer: float = 6.0
 var reporter_name: String = ""
 var reported_body_name: String = ""
+var local_player_id: int = 0
 
 var alive_characters: Array[Dictionary] = []
 var testimonies: Array[LivingEvidenceEngine.TestimonyStatement] = []
@@ -34,11 +37,13 @@ func _ready() -> void:
 	custom_minimum_size = Vector2(1280, 720)
 
 func setup_meeting(p_reporter: String, p_victim: String,
-				  chars: Array[Dictionary], testims: Array[LivingEvidenceEngine.TestimonyStatement]) -> void:
+				  chars: Array[Dictionary], testims: Array[LivingEvidenceEngine.TestimonyStatement],
+				  p_player_id: int = 0) -> void:
 	reporter_name = p_reporter
 	reported_body_name = p_victim
 	alive_characters = chars
 	testimonies = testims
+	local_player_id = p_player_id
 	votes.clear()
 	current_phase = MeetingPhase.DISCUSSION
 	phase_timer = 6.0
@@ -76,7 +81,7 @@ func process_ai_votes() -> void:
 	# AI casts votes based on evidence contradictions
 	for c in alive_characters:
 		var c_id: int = c["id"]
-		if c_id == 0:
+		if c_id == local_player_id:
 			continue # Local human player votes manually
 		if c_id in votes:
 			continue
@@ -129,19 +134,29 @@ func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
 		var mouse_ev := event as InputEventMouseButton
 		var mpos: Vector2 = mouse_ev.position
-		# Check card vote buttons
-		var y := 180.0
-		for i in range(alive_characters.size()):
-			var btn_rect := Rect2(820, y - 6, 80, 34)
-			if btn_rect.has_point(mpos):
-				votes[0] = alive_characters[i]["id"]
-				return
-			y += 54.0
 
-		# Skip button
-		var skip_rect := Rect2(920, 580, 160, 40)
+		# Check 2-column vote cards
+		var col_w: float = 460.0
+		var card_h: float = 78.0
+		var gap_y: float = 88.0
+
+		for i in range(alive_characters.size()):
+			var col_idx: int = i % 2
+			var row_idx: int = i / 2
+			var cx: float = 170.0 + (col_idx * (col_w + 20.0))
+			var cy: float = 115.0 + (row_idx * gap_y)
+
+			# Click on vote button or entire card
+			var btn_rect := Rect2(cx + col_w - 76, cy + 22, 68, 34)
+			var card_rect := Rect2(cx, cy, col_w, card_h)
+			if btn_rect.has_point(mpos) or card_rect.has_point(mpos):
+				votes[local_player_id] = alive_characters[i]["id"]
+				return
+
+		# Skip button at bottom center
+		var skip_rect := Rect2(540, 610, 200, 42)
 		if skip_rect.has_point(mpos):
-			votes[0] = -1
+			votes[local_player_id] = -1
 
 func _draw() -> void:
 	if current_phase == MeetingPhase.EJECTION:
@@ -149,74 +164,102 @@ func _draw() -> void:
 		return
 
 	# Overlay Backdrop
-	draw_rect(Rect2(0, 0, 1280, 720), Color(0.04, 0.06, 0.10, 0.94))
+	draw_rect(Rect2(0, 0, 1280, 720), Color(0.04, 0.06, 0.10, 0.95))
 
 	# Main Meeting Panel
-	var panel := Rect2(160, 40, 960, 640)
-	draw_rect(panel, Color(0.08, 0.12, 0.18, 0.96))
-	draw_rect(panel, Color(0.2, 0.5, 0.8), false, 2.0)
+	var panel := Rect2(140, 30, 1000, 660)
+	draw_rect(panel, Color(0.06, 0.10, 0.16, 0.98))
+	draw_rect(panel, Color(0.15, 0.45, 0.75), false, 2.0)
 
 	# Title Banner
-	var title_str := "EMERGENCY MEETING — LIVING EVIDENCE REVIEW" if reported_body_name == "" else "DEAD BODY REPORTED BY %s!" % reporter_name.to_upper()
-	draw_string(ThemeDB.fallback_font, Vector2(200, 80), title_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 0.35, 0.35))
-	var phase_str := "PHASE: DISCUSSION (%ds)" % int(phase_timer) if current_phase == MeetingPhase.DISCUSSION else "PHASE: CAST YOUR VOTE (%ds)" % int(phase_timer)
-	draw_string(ThemeDB.fallback_font, Vector2(200, 105), phase_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.9, 0.85, 0.2))
+	var title_str := "EMERGENCY EXPEDITION CONVOCATION" if reported_body_name == "" else "DEAD BODY DISCOVERED // REPORTED BY %s!" % reporter_name.to_upper()
+	draw_string(ThemeDB.fallback_font, Vector2(170, 65), title_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 16, Color(1, 0.35, 0.35))
+	
+	var phase_str := "PHASE: EVIDENCE DISCUSSION (%ds remaining)" % int(phase_timer) if current_phase == MeetingPhase.DISCUSSION else "PHASE: CAST YOUR ACCUSATION VOTE (%ds remaining)" % int(phase_timer)
+	var phase_col := Color(0.9, 0.85, 0.2) if current_phase == MeetingPhase.DISCUSSION else Color(0.0, 0.9, 1.0)
+	draw_string(ThemeDB.fallback_font, Vector2(170, 92), phase_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, phase_col)
 
-	# Player Testimonies & Cards List
-	var y := 150.0
+	# 2-Column Roster Grid (up to 10 characters fit perfectly)
+	var col_w: float = 460.0
+	var card_h: float = 78.0
+	var gap_y: float = 88.0
+
 	for i in range(alive_characters.size()):
 		var c := alive_characters[i]
 		var c_id: int = c["id"]
-		var card_rect := Rect2(200, y, 720, 48)
-		draw_rect(card_rect, Color(0.12, 0.16, 0.24))
-		draw_rect(card_rect, Color(0.25, 0.45, 0.65), false, 1.5)
+		var col_idx: int = i % 2
+		var row_idx: int = i / 2
+		var cx: float = 170.0 + (col_idx * (col_w + 20.0))
+		var cy: float = 115.0 + (row_idx * gap_y)
 
-		# Role icon / color dot
+		var card_rect := Rect2(cx, cy, col_w, card_h)
+		var is_you := (c_id == local_player_id)
+		var card_border := Color(0.0, 0.85, 1.0) if is_you else Color(0.2, 0.35, 0.55)
+		draw_rect(card_rect, Color(0.08, 0.12, 0.18, 0.92))
+		draw_rect(card_rect, card_border, false, 1.4)
+
+		# Role color dot / portrait center
 		var role_col: Color = CrewmateRenderer.get_role_color(c.get("role", GameEnums.Role.CREW_DEFAULT))
-		draw_circle(Vector2(225, y + 24), 12.0, role_col)
+		draw_circle(Vector2(cx + 24, cy + 28), 12.0, role_col)
+		draw_arc(Vector2(cx + 24, cy + 28), 12.0, 0, TAU, 16, Color(1, 1, 1, 0.6), 1.2)
 
-		draw_string(ThemeDB.fallback_font, Vector2(250, y + 22), c["name"], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1))
+		# Name & (YOU) tag
+		var name_str: String = c["name"] + (" (YOU)" if is_you else "")
+		draw_string(ThemeDB.fallback_font, Vector2(cx + 46, cy + 24), name_str, HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 1, 1))
 
-		# Show testimony statement
+		# Find testimony
 		for t in testimonies:
 			if t.speaker_id == c_id:
-				var stmt_text := "\"I was at %s (%s)\"" % [t.claimed_room, t.claimed_activity]
-				draw_string(ThemeDB.fallback_font, Vector2(250, y + 40), stmt_text, HORIZONTAL_ALIGNMENT_LEFT, 460, 10, Color(0.7, 0.85, 0.95))
-				# Contradiction Alert Badge
+				var stmt_text := "\"At %s (%s)\"" % [t.claimed_room, t.claimed_activity]
+				draw_string(ThemeDB.fallback_font, Vector2(cx + 46, cy + 44), stmt_text, HORIZONTAL_ALIGNMENT_LEFT, int(col_w - 130), 10, Color(0.7, 0.85, 0.95))
 				if not t.is_truthful and t.contradiction_reason != "":
-					draw_rect(Rect2(640, y + 6, 170, 22), Color(0.85, 0.1, 0.2, 0.9))
-					draw_string(ThemeDB.fallback_font, Vector2(645, y + 21), "[CONTRADICTION!]", HORIZONTAL_ALIGNMENT_CENTER, 160, 10, Color(1, 1, 1))
+					var alert_rect := Rect2(cx + 46, cy + 54, 300, 18)
+					draw_rect(alert_rect, Color(0.85, 0.1, 0.2, 0.9))
+					draw_string(ThemeDB.fallback_font, Vector2(cx + 50, cy + 67), "! CONTRADICTION: Alibi refuted by evidence", HORIZONTAL_ALIGNMENT_LEFT, 290, 9, Color(1, 1, 1))
 				break
 
-		# Vote Button for local player during voting phase
-		if current_phase == MeetingPhase.VOTING and (not (0 in votes)):
-			var btn_rect := Rect2(820, y + 8, 80, 32)
-			draw_rect(btn_rect, Color(0.0, 0.7, 0.5))
-			draw_string(ThemeDB.fallback_font, Vector2(835, y + 28), "VOTE", HORIZONTAL_ALIGNMENT_CENTER, -1, 11, Color(1, 1, 1))
-		elif c_id in votes:
-			draw_string(ThemeDB.fallback_font, Vector2(830, y + 28), "[VOTED]", HORIZONTAL_ALIGNMENT_CENTER, -1, 11, Color(0.3, 0.9, 0.4))
+		# Vote Button / Status on the right
+		var btn_rect := Rect2(cx + col_w - 76, cy + 22, 68, 34)
+		if current_phase == MeetingPhase.VOTING:
+			if not (local_player_id in votes):
+				draw_rect(btn_rect, Color(0.0, 0.75, 0.45))
+				draw_rect(btn_rect, Color(0.4, 0.95, 0.7), false, 1.2)
+				draw_string(ThemeDB.fallback_font, Vector2(btn_rect.position.x, btn_rect.position.y + 22), "VOTE", HORIZONTAL_ALIGNMENT_CENTER, int(btn_rect.size.x), 11, Color(1, 1, 1))
+			elif votes.get(local_player_id) == c_id:
+				draw_rect(btn_rect, Color(0.85, 0.2, 0.3))
+				draw_string(ThemeDB.fallback_font, Vector2(btn_rect.position.x, btn_rect.position.y + 22), "VOTED", HORIZONTAL_ALIGNMENT_CENTER, int(btn_rect.size.x), 11, Color(1, 1, 1))
 
-		y += 56.0
+		# Show total votes cast against this person if voting concluded
+		var v_count: int = 0
+		for v_target in votes.values():
+			if v_target == c_id:
+				v_count += 1
+		if v_count > 0:
+			var count_badge := Rect2(cx + col_w - 120, cy + 6, 36, 18)
+			draw_rect(count_badge, Color(0.8, 0.2, 0.25, 0.8))
+			draw_string(ThemeDB.fallback_font, Vector2(count_badge.position.x, count_badge.position.y + 13), "%d vote" % v_count, HORIZONTAL_ALIGNMENT_CENTER, int(count_badge.size.x), 8, Color(1, 1, 1))
 
-	# Skip Vote Button
+	# Skip Vote Button at bottom center
 	if current_phase == MeetingPhase.VOTING:
-		var skip_btn := Rect2(920, 580, 160, 40)
-		draw_rect(skip_btn, Color(0.3, 0.35, 0.45))
-		draw_rect(skip_btn, Color(0.6, 0.7, 0.8), false, 1.5)
-		draw_string(ThemeDB.fallback_font, Vector2(940, 605), "SKIP VOTE", HORIZONTAL_ALIGNMENT_CENTER, 120, 12, Color(1, 1, 1))
+		var skip_btn := Rect2(540, 610, 200, 42)
+		var skip_col := Color(0.2, 0.26, 0.36) if not (local_player_id in votes and votes[local_player_id] == -1) else Color(0.3, 0.6, 0.5)
+		draw_rect(skip_btn, skip_col)
+		draw_rect(skip_btn, Color(0.5, 0.65, 0.8), false, 1.5)
+		var skip_text := "SKIP VOTE" if not (local_player_id in votes and votes[local_player_id] == -1) else "[SKIPPED]"
+		draw_string(ThemeDB.fallback_font, Vector2(skip_btn.position.x, skip_btn.position.y + 26), skip_text, HORIZONTAL_ALIGNMENT_CENTER, int(skip_btn.size.x), 13, Color(1, 1, 1))
 
 func draw_ejection_scene() -> void:
 	# Space ejection cutscene
 	draw_rect(Rect2(0, 0, 1280, 720), Color(0.02, 0.03, 0.06))
 
 	# Stars
-	for i in range(40):
+	for i in range(50):
 		var sx: float = fmod(i * 137.0 + anim_timer * 15.0, 1280.0)
 		var sy: float = fmod(i * 257.0, 720.0)
 		draw_circle(Vector2(sx, sy), 1.5, Color(1, 1, 1, 0.7))
 
 	if ejected_id == -1:
-		draw_string(ThemeDB.fallback_font, Vector2(460, 360), "No one was ejected. (Tie / Skipped)", HORIZONTAL_ALIGNMENT_CENTER, 360, 18, Color(1, 1, 1))
+		draw_string(ThemeDB.fallback_font, Vector2(400, 360), "No one was ejected. (Tie or Skipped vote)", HORIZONTAL_ALIGNMENT_CENTER, 480, 18, Color(1, 1, 1))
 	else:
 		# Floating rotating astronaut
 		var float_x := 1280.0 * (1.0 - (phase_timer / 5.0))
@@ -225,4 +268,4 @@ func draw_ejection_scene() -> void:
 
 		var verdict := "%s was %s." % [ejected_name, "AN IMPOSTOR" if ejected_is_impostor else "NOT An Impostor"]
 		var verdict_col := Color(1.0, 0.3, 0.3) if ejected_is_impostor else Color(0.4, 0.9, 0.6)
-		draw_string(ThemeDB.fallback_font, Vector2(400, 420), verdict, HORIZONTAL_ALIGNMENT_CENTER, 480, 20, verdict_col)
+		draw_string(ThemeDB.fallback_font, Vector2(360, 420), verdict, HORIZONTAL_ALIGNMENT_CENTER, 560, 22, verdict_col)

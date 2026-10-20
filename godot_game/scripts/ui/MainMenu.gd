@@ -11,16 +11,17 @@ extends Control
 const SaveManager = preload("res://scripts/core/SaveManager.gd")
 const GameEnums = preload("res://scripts/core/GameEnums.gd")
 
-signal campaign_selected(mode: GameEnums.CampaignMode)
+signal campaign_selected(mode: GameEnums.CampaignMode, role_pref: int)
 signal start_game_requested(as_saboteur: bool)
 signal academic_lab_requested()
 
 enum MenuOption {
 	CAMPAIGN_HOLLOW_CROWN = 0,
 	CAMPAIGN_BLACKGLASS = 1,
-	ACADEMIC_LAB = 2,
-	SETTINGS_STATS = 3,
-	QUIT = 4
+	CAMPAIGN_LAST_SIGNAL = 2,
+	ACADEMIC_LAB = 3,
+	SETTINGS_STATS = 4,
+	QUIT = 5
 }
 
 var selected_option: int = 0
@@ -29,6 +30,7 @@ var anim_timer: float = 0.0
 var show_how_to_play: bool = false
 var show_settings: bool = false
 
+var role_preference: int = 0 # 0: Random (20%), 1: Guaranteed Imposter (100%), 2: Guaranteed Crew Specialist
 var save_data: Dictionary = {}
 
 func _ready() -> void:
@@ -53,13 +55,19 @@ func _unhandled_input(event: InputEvent) -> void:
 
 		match event.keycode:
 			KEY_W, KEY_UP:
-				selected_option = (selected_option - 1 + 5) % 5
+				selected_option = (selected_option - 1 + 6) % 6
 			KEY_S, KEY_DOWN:
-				selected_option = (selected_option + 1) % 5
+				selected_option = (selected_option + 1) % 6
+			KEY_T:
+				cycle_role_preference()
 			KEY_ENTER, KEY_SPACE:
 				activate_option()
 			KEY_G:
 				academic_lab_requested.emit()
+
+func cycle_role_preference() -> void:
+	role_preference = (role_preference + 1) % 3
+	queue_redraw()
 
 func _gui_input(event: InputEvent) -> void:
 	if not visible:
@@ -75,7 +83,7 @@ func _gui_input(event: InputEvent) -> void:
 		var mpos := mouse_ev.position
 		hovered_option = -1
 		var y := 245.0
-		for i in range(5):
+		for i in range(6):
 			var btn_rect := Rect2(card_x, y, card_w, 48)
 			if btn_rect.has_point(mpos):
 				hovered_option = i
@@ -90,8 +98,15 @@ func _gui_input(event: InputEvent) -> void:
 			return
 		var mouse_ev := event as InputEventMouseButton
 		var mpos := mouse_ev.position
+
+		# Check role preference toggle click
+		var role_rect := Rect2(card_x, 196, card_w, 34)
+		if role_rect.has_point(mpos):
+			cycle_role_preference()
+			return
+
 		var y := 245.0
-		for i in range(5):
+		for i in range(6):
 			var btn_rect := Rect2(card_x, y, card_w, 48)
 			if btn_rect.has_point(mpos):
 				selected_option = i
@@ -102,11 +117,14 @@ func _gui_input(event: InputEvent) -> void:
 func activate_option() -> void:
 	match selected_option:
 		MenuOption.CAMPAIGN_HOLLOW_CROWN:
-			campaign_selected.emit(GameEnums.CampaignMode.HOLLOW_CROWN)
-			start_game_requested.emit(false)
+			campaign_selected.emit(GameEnums.CampaignMode.HOLLOW_CROWN, role_preference)
+			start_game_requested.emit(role_preference == 1)
 		MenuOption.CAMPAIGN_BLACKGLASS:
-			campaign_selected.emit(GameEnums.CampaignMode.BLACKGLASS_STATION)
-			start_game_requested.emit(false)
+			campaign_selected.emit(GameEnums.CampaignMode.BLACKGLASS_STATION, role_preference)
+			start_game_requested.emit(role_preference == 1)
+		MenuOption.CAMPAIGN_LAST_SIGNAL:
+			campaign_selected.emit(GameEnums.CampaignMode.THE_LAST_SIGNAL, role_preference)
+			start_game_requested.emit(role_preference == 1)
 		MenuOption.ACADEMIC_LAB:
 			academic_lab_requested.emit()
 		MenuOption.SETTINGS_STATS:
@@ -128,6 +146,7 @@ func _draw() -> void:
 
 	# 3. Main Title & Living Evidence Engine Header
 	draw_title_header(vp)
+	draw_role_preference_pill(vp)
 
 	if show_how_to_play:
 		draw_how_to_play_modal(vp)
@@ -141,7 +160,7 @@ func _draw() -> void:
 
 	# 5. Footer Academic & System Info
 	draw_string(ThemeDB.fallback_font, Vector2(0, vp.y - 20),
-		"VOIDSHIFT ENGINE v2.0  •  THE LIVING EVIDENCE ENGINE  •  TWO DEFINITIVE NARRATIVE MYSTERIES",
+		"VOIDSHIFT ENGINE v2.0  •  THE LIVING EVIDENCE ENGINE  •  THREE ORIGINAL NARRATIVE CAMPAIGNS",
 		HORIZONTAL_ALIGNMENT_CENTER, int(vp.x), 10, Color(0.38, 0.52, 0.68))
 
 func draw_cosmic_space_vista(vp: Vector2) -> void:
@@ -234,10 +253,51 @@ func draw_title_header(vp: Vector2) -> void:
 	draw_string(ThemeDB.fallback_font, Vector2(title_x, 156), "EVERY WITNESS HAS A STORY. EVERY STORY LEAVES A TRACE.", HORIZONTAL_ALIGNMENT_CENTER, int(title_w), 11, Color(0.85, 0.75, 0.40))
 	draw_string(ThemeDB.fallback_font, Vector2(title_x, 178), "Autonomous 2D Sci-Fi Social Deduction & Forensic Investigation Suite", HORIZONTAL_ALIGNMENT_CENTER, int(title_w), 10, Color(0.55, 0.75, 0.95))
 
+func draw_role_preference_pill(vp: Vector2) -> void:
+	var card_w: float = 520.0
+	var card_x: float = (vp.x - card_w) * 0.5
+	var pill_rect := Rect2(card_x, 196, card_w, 34)
+
+	var p_col: Color
+	var p_text: String
+	var p_tag: String
+	match role_preference:
+		0:
+			p_col = Color(0.95, 0.75, 0.25)
+			p_text = "ROLE: RANDOM UNCERTAINTY (20% SABOTEUR)"
+			p_tag = "DEFAULT"
+		1:
+			p_col = Color(1.0, 0.25, 0.35)
+			p_text = "ROLE: SHADOW PROTOCOL (100% GUARANTEED IMPOSTOR)"
+			p_tag = "IMPOSTOR"
+		2:
+			p_col = Color(0.0, 0.88, 1.0)
+			p_text = "ROLE: CREW SPECIALIST (0% SABOTEUR)"
+			p_tag = "CREW"
+
+	# Glow for shadow protocol
+	if role_preference == 1:
+		var glow_pulse: float = 0.85 + sin(anim_timer * 4.0) * 0.15
+		draw_rect(pill_rect, Color(0.20, 0.04, 0.08, 0.90))
+		draw_rect(pill_rect, p_col * glow_pulse, false, 2.0)
+	else:
+		draw_rect(pill_rect, Color(0.04, 0.08, 0.14, 0.85))
+		draw_rect(pill_rect, p_col * 0.7, false, 1.4)
+
+	# Tag badge on right
+	var tag_rect := Rect2(pill_rect.end.x - 84, pill_rect.position.y + 7, 74, 20)
+	draw_rect(tag_rect, p_col * 0.25)
+	draw_rect(tag_rect, p_col * 0.8, false, 1.0)
+	draw_string(ThemeDB.fallback_font, Vector2(tag_rect.position.x, tag_rect.position.y + 14), p_tag, HORIZONTAL_ALIGNMENT_CENTER, int(tag_rect.size.x), 9, p_col)
+
+	# Main Label
+	draw_string(ThemeDB.fallback_font, Vector2(pill_rect.position.x + 14, pill_rect.position.y + 22), "[T / CLICK TO CYCLE]  " + p_text, HORIZONTAL_ALIGNMENT_LEFT, int(card_w - 96), 10, p_col)
+
 func draw_action_cards(vp: Vector2) -> void:
 	var options := [
-		{"title": "1. THE HOLLOW CROWN", "sub": "Japanese Estate Mystery — Moonlight, Shadows & Missing Relic", "tag": "STORY I", "primary": true, "accent": Color(0.95, 0.75, 0.35)},
-		{"title": "2. BLACKGLASS STATION", "sub": "Sci-Fi Mystery — Silent Spacecraft & Vanished Prototype", "tag": "STORY II", "primary": true, "accent": Color(0.0, 0.88, 1.0)},
+		{"title": "1. THE HOLLOW CROWN", "sub": "Archaeological Sci-Fi Mystery — Buried Alien Complex", "tag": "CAMPAIGN I", "primary": true, "accent": Color(0.9, 0.75, 0.35)},
+		{"title": "2. BLACKGLASS STATION", "sub": "Forensic Noir Mystery — Failing Orbital Outpost", "tag": "CAMPAIGN II", "primary": true, "accent": Color(0.0, 0.85, 1.0)},
+		{"title": "3. THE LAST SIGNAL", "sub": "Polar Survival Mystery — Sub-Ice Temporal Anomaly", "tag": "CAMPAIGN III", "primary": true, "accent": Color(0.6, 0.85, 1.0)},
 		{"title": "CG ACADEMIC LAB", "sub": "12 Interactive syllabus visualization modes [Key: G]", "tag": "SYLLABUS", "primary": false, "accent": Color(0.2, 0.9, 0.6)},
 		{"title": "SYSTEM DOSSIER & PROTOCOLS", "sub": "Offline career match history, forensic rules & guide", "tag": "DOSSIER", "primary": false, "accent": Color(0.7, 0.6, 0.9)},
 		{"title": "ABORT MISSION", "sub": "Exit application to desktop", "tag": "EXIT", "primary": false, "accent": Color(0.8, 0.3, 0.3)}
@@ -245,7 +305,7 @@ func draw_action_cards(vp: Vector2) -> void:
 
 	var card_w: float = 520.0
 	var card_x: float = (vp.x - card_w) * 0.5
-	var y := 245.0
+	var y := 240.0
 
 	for i in range(options.size()):
 		var is_selected := (selected_option == i)
@@ -288,7 +348,7 @@ func draw_action_cards(vp: Vector2) -> void:
 		draw_rect(tag_rect, border_col, false, 1.0)
 		draw_string(ThemeDB.fallback_font, Vector2(tag_rect.position.x, y + 28), opt["tag"], HORIZONTAL_ALIGNMENT_CENTER, 80, 9, border_col)
 
-		y += 56.0
+		y += 55.0
 
 func draw_settings_modal(vp: Vector2) -> void:
 	var modal_w: float = 880.0
@@ -304,13 +364,14 @@ func draw_settings_modal(vp: Vector2) -> void:
 	var lines := [
 		"EXPEDITION DOSSIER (Saved locally to user://voidshift_save.json):",
 		"- Missions Deployed: %d" % stats.get("matches_played", 0),
-		"- Crew Victories (Culprit Unmasked): %d" % stats.get("crewmate_victories", 0),
-		"- Saboteur Victories (Incident Unresolved): %d" % stats.get("saboteur_victories", 0),
-		"- Total Clues Recovered & Verified: %d" % stats.get("tasks_completed_lifetime", 0),
+		"- Crewmate Victories (Saboteur Unmasked): %d" % stats.get("crewmate_victories", 0),
+		"- Saboteur Victories (Station Compromised): %d" % stats.get("saboteur_victories", 0),
+		"- Total Maintenance Tasks Verified: %d" % stats.get("tasks_completed_lifetime", 0),
 		"",
-		"TWO DEFINITIVE NARRATIVE MYSTERIES:",
-		"- THE HOLLOW CROWN: Japanese mountain estate. Discover how the sacred relic vanished from the sealed inner shrine.",
-		"- BLACKGLASS STATION: Deep-space research vessel. Investigate the blackout, missing prototype, and breached laboratory.",
+		"THREE NARRATIVE CAMPAIGNS:",
+		"- THE HOLLOW CROWN: Subterranean alien ruins. Recover the Hollow Crown before containment collapse.",
+		"- BLACKGLASS STATION: Forensic murder mystery. Examine shattered neurotoxin vials & scrubbed CCTV logs.",
+		"- THE LAST SIGNAL: Sub-ice polar facility. Decode repeating acoustic waves & resolve temporal echo anomalies.",
 		"",
 		"CONTROLS: WASD = Move | E = Contextual Interact | Q = Echo Vision | TAB = Evidence Workstation | ESC = Back",
 		"",
@@ -318,7 +379,7 @@ func draw_settings_modal(vp: Vector2) -> void:
 	]
 	var y := modal.position.y + 80.0
 	for l in lines:
-		var col := Color(0.0, 0.92, 0.8) if (l.begins_with("EXPEDITION") or l.begins_with("TWO") or l.begins_with("CONTROLS")) else Color(0.85, 0.92, 0.98)
+		var col := Color(0.0, 0.92, 0.8) if (l.begins_with("EXPEDITION") or l.begins_with("THREE") or l.begins_with("CONTROLS")) else Color(0.85, 0.92, 0.98)
 		draw_string(ThemeDB.fallback_font, Vector2(modal.position.x + 36, y), l, HORIZONTAL_ALIGNMENT_LEFT, int(modal_w - 72), 11, col)
 		y += 26.0
 

@@ -223,21 +223,36 @@ func test_task_manager() -> bool:
 
 func test_sabotage_manager() -> bool:
 	var sab := SabotageManager.new()
+	# Test Reactor Core Sabotage
 	sab.trigger_sabotage(GameEnums.SabotageType.REACTOR)
 	if sab.active_sabotage != GameEnums.SabotageType.REACTOR or sab.timer != 45.0:
 		return false
-
 	sab.update(46.0)
 	if not sab.is_critical_failure():
 		return false
+	sab.repair_sabotage()
+	if sab.active_sabotage != GameEnums.SabotageType.NONE:
+		return false
 
+	# Test Electrical / Lights Sabotage
+	sab.trigger_sabotage(GameEnums.SabotageType.LIGHTS)
+	if sab.active_sabotage != GameEnums.SabotageType.LIGHTS:
+		return false
+	sab.repair_sabotage()
+	if sab.active_sabotage != GameEnums.SabotageType.NONE:
+		return false
+
+	# Test Oxygen Depletion Sabotage (Critical countdown)
+	sab.trigger_sabotage(GameEnums.SabotageType.OXYGEN)
+	if sab.active_sabotage != GameEnums.SabotageType.OXYGEN or sab.timer != 35.0:
+		return false
 	sab.repair_sabotage()
 	if sab.active_sabotage != GameEnums.SabotageType.NONE:
 		return false
 	return true
 
 func test_role_allocation() -> bool:
-	# Test across 5 deterministic seeds
+	# Test across 5 deterministic seeds for default distribution
 	for s in range(5):
 		var assignments := RoleAllocator.allocate_roles(GameEnums.CampaignMode.HOLLOW_CROWN, s * 42 + 7)
 		if assignments.size() != 10:
@@ -260,12 +275,39 @@ func test_role_allocation() -> bool:
 		if saboteur_count != 2:
 			return false
 
+	# Test Guaranteed Imposter / Saboteur Protocol (force_role_type = 1)
+	for s in range(5):
+		var forced_imp := RoleAllocator.allocate_roles(GameEnums.CampaignMode.HOLLOW_CROWN, s * 17 + 3, 1)
+		var player_is_saboteur := false
+		var total_saboteurs := 0
+		for a in forced_imp:
+			if a.is_player and a.is_saboteur:
+				player_is_saboteur = true
+			if a.is_saboteur:
+				total_saboteurs += 1
+		if not player_is_saboteur or total_saboteurs != 2:
+			return false
+
+	# Test Guaranteed Crew Specialist (force_role_type = 2)
+	for s in range(5):
+		var forced_crew := RoleAllocator.allocate_roles(GameEnums.CampaignMode.HOLLOW_CROWN, s * 31 + 5, 2)
+		var player_is_crew := false
+		var total_saboteurs := 0
+		for a in forced_crew:
+			if a.is_player and not a.is_saboteur:
+				player_is_crew = true
+			if a.is_saboteur:
+				total_saboteurs += 1
+		if not player_is_crew or total_saboteurs != 2:
+			return false
+
 	return true
 
 func test_campaign_integrity() -> bool:
 	var modes := [
 		GameEnums.CampaignMode.HOLLOW_CROWN,
-		GameEnums.CampaignMode.BLACKGLASS_STATION
+		GameEnums.CampaignMode.BLACKGLASS_STATION,
+		GameEnums.CampaignMode.THE_LAST_SIGNAL
 	]
 
 	for m in modes:

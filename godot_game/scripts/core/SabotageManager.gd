@@ -24,6 +24,9 @@ func trigger_sabotage(type: GameEnums.SabotageType) -> void:
 		GameEnums.SabotageType.COMMUNICATIONS:
 			max_timer = 50.0
 			timer = 50.0
+		GameEnums.SabotageType.OXYGEN:
+			max_timer = 35.0
+			timer = 35.0
 	sabotage_triggered.emit(type)
 
 func update(delta: float) -> void:
@@ -31,7 +34,7 @@ func update(delta: float) -> void:
 		timer -= delta
 		if timer <= 0.0:
 			timer = 0.0
-			if active_sabotage == GameEnums.SabotageType.REACTOR:
+			if active_sabotage == GameEnums.SabotageType.REACTOR or active_sabotage == GameEnums.SabotageType.OXYGEN:
 				critical_failure_reached.emit()
 
 func repair_sabotage() -> void:
@@ -40,4 +43,4 @@ func repair_sabotage() -> void:
 	sabotage_repaired.emit()
 
 func is_critical_failure() -> bool:
-	return active_sabotage == GameEnums.SabotageType.REACTOR and timer <= 0.0
+	return (active_sabotage == GameEnums.SabotageType.REACTOR or active_sabotage == GameEnums.SabotageType.OXYGEN) and timer <= 0.0

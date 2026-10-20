@@ -9,6 +9,8 @@ const CrewmateRenderer = preload("res://scripts/render/CrewmateRenderer.gd")
 
 signal bot_eliminated(victim: CrewmateAI, killer_name: String)
 signal bot_entered_room(bot: CrewmateAI, room_name: String)
+signal body_reported(reporter_name: String, victim_name: String)
+signal sabotage_requested(sab_type: GameEnums.SabotageType)
 
 enum AIState {
 	WANDERING,
@@ -59,6 +61,16 @@ func update_ai(delta: float, room_waypoints: Array[Vector2], task_positions: Arr
 
 	state_timer -= delta
 	observation_timer += delta
+
+	# Check for nearby fallen crew bodies (Emergency Convocation)
+	for ch in all_characters:
+		if ch != self and ch.character_state == GameEnums.CharacterState.DEAD:
+			var d_body := global_position.distance_to(ch.global_position)
+			if d_body <= 110.0:
+				var victim_n: String = ch.bot_name if ch is CrewmateAI else (ch.player_name if ch is PlayerController else "Crewmate")
+				if not is_saboteur() or randf() < 0.35:
+					body_reported.emit(bot_name, victim_n)
+					return
 
 	# 1. Periodically record observations of nearby characters
 	if observation_timer >= 1.5:
@@ -217,4 +229,7 @@ func _draw() -> void:
 	if character_state == GameEnums.CharacterState.VENTING:
 		return
 	var is_dead := (character_state == GameEnums.CharacterState.DEAD)
-	CrewmateRenderer.draw_character(self, Vector2.ZERO, bot_name, role, is_dead, walk_time, is_facing_left, false)
+	CrewmateRenderer.draw_astronaut(self, Vector2.ZERO, role, is_dead, walk_time, is_facing_left, false)
+	# Draw Bot Name Banner above head
+	var name_color := Color(1.0, 0.35, 0.35) if (role == GameEnums.Role.SABOTEUR_IMPOSTOR and is_dead) else Color(0.85, 0.9, 1.0, 0.85)
+	draw_string(ThemeDB.fallback_font, Vector2(-24, -36), bot_name, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, name_color)
